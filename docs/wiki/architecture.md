@@ -2,7 +2,7 @@
 
 Status: V1 implemented
 
-The application exposes one deep analysis Interface, `analyzeClipboard(source, request?)`. The named request contains optional output selection, Type Overrides, Static Switch Overrides, and formatting. This Seam hides parsing, Graph IR resolution, slicing, type inference, translation, and deterministic rendering from the UI.
+The application exposes one deep analysis Interface, `analyzeClipboard(source, request?)`. The named request contains optional output selection, Type Overrides, Static Switch Overrides, Name Overrides, and formatting. This Seam hides parsing, Graph IR resolution, slicing, type inference, translation, and deterministic rendering from the UI.
 
 Current supporting surface:
 
@@ -18,8 +18,8 @@ Current supporting surface:
 - `docs/wiki/input-data-expression-registry.md` - maintained contract for the supplied constant/input-data palette and documented missing base sources.
 - `docs/wiki/advanced-expression-registry.md` - maintained contract for advanced UE 5.8 expression families, dynamic pins, terminal sinks, and texture sampling modes.
 - `src/graph/material-types.ts` - numeric and material-domain type Module. It owns internal float/uint construction, family, width, promotion, family casts, Function Input declarations, and the narrower user-selectable override list.
-- `src/pseudo-hlsl/generate.ts` - supported-node translation, opaque fallback, diagnostics, and stable text rendering behind one interface.
-- `src/main.ts` and `src/styles.css` - dependency-free DOM Adapter in the approved visual language. `main.ts` depends only on the application analysis Seam and has one reanalysis path for every output, override, and formatting change.
+- `src/pseudo-hlsl/generate.ts` - supported-node translation, opaque fallback, diagnostics, stable text rendering, and the stable editable-symbol map behind one interface.
+- `src/main.ts` and `src/styles.css` - dependency-free DOM Adapter in the approved visual language. `main.ts` depends only on the application analysis Seam and has one reanalysis path for every output, override, formatting change, and inline presentation edit.
 - `tests/` - public-interface, fixture-corpus, invariant, and stable-output tests.
 
 Parser-relevant evidence from the current fixtures:
@@ -46,7 +46,7 @@ Main flow:
 2. `resolveGraph` resolves expression nodes, pins, links, roots, outputs, and unresolved references.
 3. `sliceOutput` walks one selected output upstream; `sliceOutputs` builds one union slice for a Function's complete output signature. Both specialize relevant Static Switches before traversal, terminate cycles, identify external inputs, and return ordered switch metadata for the UI.
 4. `inferTypes` combines built-in expression semantics with graph constraints to derive confirmed, context-inferred, and minimum-width float/uint Type Facts without assigning global signatures to arbitrary Material Function assets.
-5. `generatePseudoHlsl` translates one output; `generateAllPseudoHlsl` translates all real Function Outputs from one union slice so shared work is emitted once. Both apply optional user Type and Static Switch Overrides, inline disposable one-use expressions, preserve semantic anchors and shared values as declarations, keep unsupported semantics explicit, and return grouped Type Override and switch metadata. Static Switch nodes become their selected values rather than opaque calls. Multi-output external calls are evaluated once: readable mode unpacks used pins into independent `out` variables, while strict mode keeps a structural result bundle. Formatting options control comment sections, Custom HLSL expansion, multiline standalone calls, and readable versus strict bundles.
+5. `generatePseudoHlsl` translates one output; `generateAllPseudoHlsl` translates all real Function Outputs from one union slice so shared work is emitted once. Both apply optional user Type, Static Switch, and Name Overrides, inline disposable one-use expressions, preserve semantic anchors and shared values as declarations, keep unsupported semantics explicit, and return grouped Type Override, switch, and editable-symbol metadata. Editable symbols use `NodeGuid + output PinId`, falling back to the temporary node identifier only when a partial clipboard omits `NodeGuid`. Static Switch nodes become their selected values rather than opaque calls. Multi-output external calls are evaluated once: readable mode unpacks used pins into independent `out` variables, while strict mode keeps a structural result bundle. Formatting options control comment sections, Custom HLSL expansion, multiline standalone calls, and readable versus strict bundles.
 6. `analyzeClipboard` presents the complete result through the single application seam.
 
 Runtime side effects are limited to DOM updates and explicit clipboard copying. Analysis is synchronous, deterministic, and makes no network requests. Hot traversals preserve one resolved node order per analysis, comment-region selection avoids per-node sorting, and the DOM Adapter batches generated code and diagnostic updates through document fragments.

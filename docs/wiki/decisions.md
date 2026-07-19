@@ -571,6 +571,31 @@ Related files:
 - `README.md`
 - `tests/`
 
+## Decision: Keep inline pseudo-HLSL edits as session-scoped presentation overrides
+
+Status: Active
+
+Context:
+The graph author may know the real intent behind a generated temporary name or the type of an opaque Material Function result. The generated code is the useful reading surface, while Unreal remains the source of graph structure and semantics.
+
+Decision:
+Expose declaration names and unresolved external-function result types directly in the pseudo-HLSL. Name Overrides are keyed by serialized `NodeGuid + Output PinId` and stored in `sessionStorage`; the generator receives them through `analyzeClipboard`. Inline types reuse the existing Type Override contract and dropdown. Do not edit clipboard text or add a general code editor.
+
+Reasoning:
+This preserves a small deterministic analysis Interface while making the rendered explanation immediately adjustable. Session scope avoids implying that an override has become Unreal graph data or a shareable asset definition.
+
+Consequences:
+Copying a full or partial graph with the same serialized GUID retains an authored name in the current tab. A clipboard fragment without `NodeGuid` uses a temporary node-ID fallback. Manual names affect presentation only; they neither rename Unreal nodes nor change graph execution.
+
+Related files:
+
+- `src/graph/types.ts`
+- `src/graph/resolve.ts`
+- `src/pseudo-hlsl/generate.ts`
+- `src/analyze.ts`
+- `src/main.ts`
+- `tests/pseudo-hlsl.test.ts`
+
 Use this form for durable choices:
 
 ## Decision: <short name>

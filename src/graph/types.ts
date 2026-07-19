@@ -31,6 +31,7 @@ export interface GraphCommentRegion {
 
 export interface GraphNode {
   id: string;
+  nodeGuid?: string;
   expressionClass: string;
   kind: GraphNodeKind;
   properties: ReadonlyMap<string, string>;

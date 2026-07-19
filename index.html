@@ -144,6 +144,19 @@
         <a class="github-link" href="https://github.com/VitalyVishnev/UE5MaterialGraphInterpreter" target="_blank" rel="noopener noreferrer">View on GitHub <span aria-hidden="true">↗</span></a>
       </div>
 
+      <div id="code-popover" class="code-popover" role="dialog" aria-modal="false" hidden>
+        <div class="code-popover-heading">
+          <label id="code-popover-label"></label>
+          <div class="code-popover-actions">
+            <button id="code-popover-reset" type="button" hidden>Reset</button>
+            <button id="code-popover-apply" type="button">Apply</button>
+          </div>
+        </div>
+        <input id="code-popover-input" type="text" autocomplete="off" spellcheck="false">
+        <select id="code-popover-type" hidden></select>
+        <p id="code-popover-error" class="code-popover-error" role="alert" hidden></p>
+      </div>
+
       <footer class="site-footer" aria-labelledby="about-title">
         <h2 id="about-title">Unreal Engine Material Graph to pseudo-HLSL</h2>
         <p>UE5 Material Graph Interpreter is a free browser tool for turning copied Unreal Engine Material Graph and Material Function nodes into readable pseudo-HLSL. Use it to inspect shader math, review unfamiliar graphs, and share material logic with collaborators or AI assistants.</p>

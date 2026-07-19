@@ -33,9 +33,24 @@ const functionCount = element<HTMLSpanElement>("function-count");
 const switchCount = element<HTMLSpanElement>("switch-count");
 const inputMeta = element<HTMLSpanElement>("input-meta");
 const status = element<HTMLParagraphElement>("status");
-const codeTokenPattern = /(\/\/.*|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\?(?:float[2-4]?\+?|bool|type)(?!\w)|\b(?:const|return|static)\b|\b(?:float[2-4]?|bool|Texture2D(?:Array)?|TextureCube(?:Array)?|Texture3D|TextureExternal|SparseVolumeTexture|MaterialAttributes|Substrate|ShadingModel)\b|\b\d+(?:\.\d+)?f?\b|\b[A-Za-z_]\w*(?=\s*\())/g;
+const codePopover = element<HTMLDivElement>("code-popover");
+const codePopoverLabel = element<HTMLLabelElement>("code-popover-label");
+const codePopoverInput = element<HTMLInputElement>("code-popover-input");
+const codePopoverType = element<HTMLSelectElement>("code-popover-type");
+const codePopoverError = element<HTMLParagraphElement>("code-popover-error");
+const codePopoverApply = element<HTMLButtonElement>("code-popover-apply");
+const codePopoverReset = element<HTMLButtonElement>("code-popover-reset");
+const codeTokenPattern = /(\/\/.*|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\?(?:float[2-4]?\+?|bool|type)(?!\w)|\b(?:const|return|static)\b|\b(?:float[2-4]?|bool|Texture2D(?:Array)?|TextureCube(?:Array)?|Texture3D|TextureExternal|SparseVolumeTexture|MaterialAttributes|Substrate|ShadingModel)\b|\b\d+(?:\.\d+)?f?\b|\b[A-Za-z_]\w*\b)/g;
 const typeTokenPattern = /^(?:float[2-4]?|bool|Texture2D(?:Array)?|TextureCube(?:Array)?|Texture3D|TextureExternal|SparseVolumeTexture|MaterialAttributes|Substrate|ShadingModel)$/;
 const keywordTokenPattern = /^(?:const|return|static)$/;
+const nameOverrideStorageKey = "ue5-material-graph-interpreter:name-overrides";
+const reservedVariableNames = new Set(["const", "return", "static", "bool", "float", "float2", "float3", "float4"]);
+
+type EditableSymbol = AnalysisResult["editableSymbols"][number];
+type TypeOverrideValue = AnalysisResult["typeOverrideGroups"][number]["values"][number];
+type CodePopoverState =
+  | { kind: "rename"; symbol: EditableSymbol }
+  | { kind: "type"; symbol: EditableSymbol; output: TypeOverrideValue };
 
 let acceptedSource = "";
 let acceptedResult: AnalysisResult | undefined;
@@ -43,15 +58,113 @@ let copyFeedbackTimer: number | undefined;
 const typeOverrides = new Map<string, MaterialType>();
 const staticSwitchOverrides = new Map<string, boolean>();
 const formatting: AnalysisFormatting = { ...defaultAnalysisFormatting };
+const nameOverrides = loadNameOverrides();
+let codePopoverState: CodePopoverState | undefined;
+
+function loadNameOverrides(): Map<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(nameOverrideStorageKey) ?? "[]");
+    if (!Array.isArray(parsed)) return new Map();
+    return new Map(parsed.filter((entry): entry is [string, string] =>
+      Array.isArray(entry) && typeof entry[0] === "string" && typeof entry[1] === "string",
+    ));
+  } catch {
+    return new Map();
+  }
+}
+
+function persistNameOverrides(): void {
+  try {
+    sessionStorage.setItem(nameOverrideStorageKey, JSON.stringify([...nameOverrides]));
+  } catch {
+    // Session storage is optional; the active page still keeps the override.
+  }
+}
 
 function setStatus(message: string, kind = ""): void {
   status.textContent = message;
   status.className = kind;
 }
 
-function renderCode(source: string): void {
+function automaticTypeLabel(output: TypeOverrideValue): string {
+  return output.status === "unknown"
+    ? "Unknown — select type"
+    : output.status === "minimum"
+      ? `Auto · ?${output.type}+`
+      : output.status === "inferred"
+        ? `Auto · ?${output.type}`
+        : "Auto · infer from graph";
+}
+
+function populateTypeSelect(select: HTMLSelectElement, output: TypeOverrideValue): void {
+  const automatic = document.createElement("option");
+  automatic.value = "";
+  automatic.textContent = automaticTypeLabel(output);
+  select.replaceChildren(automatic);
+  for (const type of materialTypeOptions) {
+    const option = document.createElement("option");
+    option.value = type;
+    option.textContent = type;
+    select.append(option);
+  }
+  select.value = output.status === "overridden" && output.type ? output.type : "";
+}
+
+function closeCodePopover(): void {
+  codePopover.hidden = true;
+  codePopoverState = undefined;
+  codePopoverError.hidden = true;
+  codePopoverError.textContent = "";
+}
+
+function positionCodePopover(target: HTMLElement): void {
+  const targetBounds = target.getBoundingClientRect();
+  const popoverBounds = codePopover.getBoundingClientRect();
+  const left = Math.min(Math.max(12, targetBounds.left), window.innerWidth - popoverBounds.width - 12);
+  const below = targetBounds.bottom + 8;
+  const top = below + popoverBounds.height <= window.innerHeight - 12
+    ? below
+    : Math.max(12, targetBounds.top - popoverBounds.height - 8);
+  codePopover.style.left = `${left}px`;
+  codePopover.style.top = `${top}px`;
+}
+
+function openRenamePopover(symbol: EditableSymbol, target: HTMLElement): void {
+  codePopoverState = { kind: "rename", symbol };
+  codePopoverLabel.textContent = `Rename ${symbol.name}`;
+  codePopoverLabel.htmlFor = "code-popover-input";
+  codePopoverInput.hidden = false;
+  codePopoverInput.value = nameOverrides.get(symbol.id) ?? symbol.name;
+  codePopoverType.hidden = true;
+  codePopoverReset.hidden = !nameOverrides.has(symbol.id);
+  codePopoverError.hidden = true;
+  codePopover.hidden = false;
+  positionCodePopover(target);
+  codePopoverInput.focus();
+  codePopoverInput.select();
+}
+
+function openTypePopover(symbol: EditableSymbol, output: TypeOverrideValue, target: HTMLElement): void {
+  codePopoverState = { kind: "type", symbol, output };
+  codePopoverLabel.textContent = `Type for ${symbol.name}`;
+  codePopoverLabel.htmlFor = "code-popover-type";
+  codePopoverInput.hidden = true;
+  codePopoverType.hidden = false;
+  populateTypeSelect(codePopoverType, output);
+  codePopoverReset.hidden = !typeOverrides.has(output.id);
+  codePopoverError.hidden = true;
+  codePopover.hidden = false;
+  positionCodePopover(target);
+  codePopoverType.focus();
+}
+
+function renderCode(result: AnalysisResult): void {
   const fragment = document.createDocumentFragment();
-  const lines = source.split("\n");
+  const symbols = new Map(result.editableSymbols.map((symbol) => [symbol.name, symbol]));
+  const types = new Map(result.typeOverrideGroups.flatMap((group) =>
+    group.values.map((output) => [output.id, output] as const),
+  ));
+  const lines = result.code.split("\n");
   for (const [lineIndex, line] of lines.entries()) {
     let cursor = 0;
     for (const match of line.matchAll(codeTokenPattern)) {
@@ -60,6 +173,11 @@ function renderCode(source: string): void {
       fragment.append(document.createTextNode(line.slice(cursor, index)));
       const span = document.createElement("span");
       span.textContent = token;
+      const followingIdentifier = line.slice(index + token.length).match(/^\s+([A-Za-z_]\w*)/)?.[1];
+      const symbol = symbols.get(token);
+      const typeOverride = token.startsWith("?") && followingIdentifier
+        ? types.get(symbols.get(followingIdentifier)?.typeOverrideId ?? "")
+        : undefined;
       span.className = token.startsWith("//")
         ? "token-comment"
         : token === "?type"
@@ -75,6 +193,33 @@ function renderCode(source: string): void {
                   : token.startsWith("\"") || token.startsWith("'")
                     ? "token-string"
                     : "token-function";
+      if (typeOverride && symbol === undefined) {
+        span.classList.add("code-type-override");
+        span.dataset.typeOverrideId = typeOverride.id;
+        span.tabIndex = 0;
+        span.title = "Choose this output type";
+        const open = () => openTypePopover(symbols.get(followingIdentifier!)!, typeOverride, span);
+        span.addEventListener("click", open);
+        span.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            open();
+          }
+        });
+      } else if (symbol) {
+        span.classList.add("code-symbol");
+        span.dataset.symbolId = symbol.id;
+        span.tabIndex = 0;
+        span.title = `Rename ${symbol.name}`;
+        const open = () => openRenamePopover(symbol, span);
+        span.addEventListener("click", open);
+        span.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            open();
+          }
+        });
+      }
       fragment.append(span);
       cursor = index + token.length;
       if (token.startsWith("//")) break;
@@ -175,23 +320,7 @@ function renderTypeOverrides(result: AnalysisResult): void {
               ? "Choose the type this Custom HLSL input expects; the connected graph could not determine it."
               : "Choose the type returned by this Material Function output, as shown inside the function in Unreal.";
 
-      const automatic = document.createElement("option");
-      automatic.value = "";
-      automatic.textContent = output.status === "unknown"
-        ? "Unknown — select type"
-        : output.status === "minimum"
-          ? `Auto · ?${output.type}+`
-          : output.status === "inferred"
-            ? `Auto · ?${output.type}`
-            : "Auto · infer from graph";
-      select.append(automatic);
-      for (const type of materialTypeOptions) {
-        const option = document.createElement("option");
-        option.value = type;
-        option.textContent = type;
-        select.append(option);
-      }
-      select.value = output.status === "overridden" && output.type ? output.type : "";
+      populateTypeSelect(select, output);
       select.addEventListener("change", () => {
         if (select.value) typeOverrides.set(output.id, select.value as MaterialType);
         else typeOverrides.delete(output.id);
@@ -261,6 +390,7 @@ function renderStaticSwitches(result: AnalysisResult): void {
 }
 
 function renderAccepted(result: AnalysisResult): void {
+  closeCodePopover();
   outputSelect.replaceChildren();
   for (const output of result.outputs) {
     const option = document.createElement("option");
@@ -271,7 +401,7 @@ function renderAccepted(result: AnalysisResult): void {
   }
   outputSelect.disabled = result.outputs.length === 0;
   bundleFormat.disabled = result.outputs.length === 0;
-  renderCode(result.code);
+  renderCode(result);
   copyButton.disabled = !result.code;
   inputMeta.textContent = `${result.nodeCount} nodes · ${result.outputs.length} outputs`;
   const warnings = renderDiagnostics(result);
@@ -300,7 +430,7 @@ function analyzeRequestedSource(): void {
     return;
   }
 
-  const result = analyzeClipboard(source, { formatting });
+  const result = analyzeClipboard(source, { formatting, nameOverrides });
   const failed = result.outputs.length === 0 || result.diagnostics.some(
     (item) => item.severity === "error" && item.code !== "graph-cycle",
   );
@@ -328,10 +458,61 @@ function reanalyzeAccepted(): void {
     outputId: outputSelect.value,
     typeOverrides,
     staticSwitchOverrides,
+    nameOverrides,
     formatting,
   });
   renderAccepted(acceptedResult);
 }
+
+function applyCodePopover(): void {
+  const state = codePopoverState;
+  if (!state) return;
+
+  if (state.kind === "type") {
+    if (codePopoverType.value) typeOverrides.set(state.output.id, codePopoverType.value as MaterialType);
+    else typeOverrides.delete(state.output.id);
+    reanalyzeAccepted();
+    return;
+  }
+
+  const name = codePopoverInput.value.trim();
+  if (!/^[A-Za-z_]\w*$/.test(name) || reservedVariableNames.has(name)) {
+    codePopoverError.textContent = "Use an HLSL-style name: letters, digits, and underscores; do not start with a digit.";
+    codePopoverError.hidden = false;
+    return;
+  }
+  if (acceptedResult?.editableSymbols.some((symbol) => symbol.id !== state.symbol.id && symbol.name === name)) {
+    codePopoverError.textContent = "This name is already used by another declaration.";
+    codePopoverError.hidden = false;
+    return;
+  }
+  if (name === state.symbol.name) nameOverrides.delete(state.symbol.id);
+  else nameOverrides.set(state.symbol.id, name);
+  persistNameOverrides();
+  reanalyzeAccepted();
+}
+
+codePopoverApply.addEventListener("click", applyCodePopover);
+codePopoverReset.addEventListener("click", () => {
+  if (!codePopoverState) return;
+  if (codePopoverState.kind === "type") typeOverrides.delete(codePopoverState.output.id);
+  else {
+    nameOverrides.delete(codePopoverState.symbol.id);
+    persistNameOverrides();
+  }
+  reanalyzeAccepted();
+});
+for (const control of [codePopoverInput, codePopoverType]) {
+  control.addEventListener("keydown", (event) => {
+    if (!(event instanceof KeyboardEvent)) return;
+    if (event.key === "Enter") applyCodePopover();
+    if (event.key === "Escape") closeCodePopover();
+  });
+}
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target;
+  if (!codePopover.hidden && target instanceof Node && !codePopover.contains(target)) closeCodePopover();
+});
 
 outputSelect.addEventListener("change", reanalyzeAccepted);
 

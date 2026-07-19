@@ -105,6 +105,28 @@ Related files:
 - `src/graph/resolve-named-reroutes.ts`
 - `samples/MF_ResolveCoordinateFrame_Biplanar_Dither/`
 
+## Limitation: Name Overrides without a serialized NodeGuid are temporary
+
+Status: Workaround
+
+Symptoms:
+An inline pseudo-HLSL rename may not apply when the same value is pasted later from a fragment whose node identifier changed.
+
+Likely cause:
+Most Unreal clipboard nodes serialize `NodeGuid`, but an incomplete or hand-edited fragment can omit it. The interpreter then has only the transient graph-node name as a key.
+
+Current workaround:
+Use the original full clipboard or a selection that includes `NodeGuid`. The current tab retains the fallback override only while that temporary node name remains the same.
+
+Do not repeat:
+Do not identify a node by generated pseudo-HLSL text or by mathematical equivalence.
+
+Related files:
+
+- `src/graph/resolve.ts`
+- `src/pseudo-hlsl/generate.ts`
+- `src/main.ts`
+
 ## Limitation: Equivalent pure nodes are not globally deduplicated
 
 Status: Open

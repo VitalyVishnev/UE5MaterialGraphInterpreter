@@ -177,6 +177,21 @@ pre {
 .token-string { color: var(--syntax-yellow); }
 .token-inferred { color: var(--syntax-inferred); }
 .token-unresolved { color: var(--syntax-unresolved); }
+.code-symbol,
+.code-type-override {
+  border-radius: 3px;
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+}
+.code-symbol:hover,
+.code-type-override:hover,
+.code-symbol:focus-visible,
+.code-type-override:focus-visible {
+  background: #25221d;
+  outline: 0;
+  text-decoration-color: currentColor;
+}
 .message-list { margin: 0; padding: 0; list-style: none; }
 .diagnostics-scroll {
   min-height: 0;
@@ -275,6 +290,42 @@ pre {
   white-space: nowrap;
 }
 .github-link:hover { color: var(--syntax-blue); text-decoration: underline; }
+.code-popover {
+  position: fixed;
+  z-index: 10;
+  display: grid;
+  width: min(17rem, calc(100vw - 2rem));
+  gap: .5rem;
+  padding: .625rem;
+  border: 1px solid var(--border);
+  border-radius: .4375rem;
+  background: var(--panel);
+  box-shadow: 0 .75rem 2.5rem #0009;
+}
+.code-popover[hidden] { display: none; }
+.code-popover-heading,
+.code-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .375rem;
+}
+.code-popover label { min-width: 0; font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code-popover input,
+.code-popover select {
+  width: 100%;
+}
+.code-popover input {
+  min-height: 2rem;
+  padding: .25rem .5rem;
+  border: 1px solid var(--border);
+  border-radius: .375rem;
+  outline-offset: 2px;
+  background: var(--input);
+  color: var(--foreground);
+}
+.code-popover-error { color: var(--error); font-size: .78rem; }
+.code-popover-actions button { min-height: 1.75rem; padding: .1875rem .4375rem; font-size: .72rem; }
 .site-footer {
   display: grid;
   gap: .375rem;

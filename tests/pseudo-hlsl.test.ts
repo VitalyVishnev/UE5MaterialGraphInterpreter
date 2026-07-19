@@ -176,6 +176,7 @@ Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="SharedMultiply"
     Desc="a controllable power node is expensive and would add complication to the functions interface"
   End Object
   NodeComment="a controllable power node is expensive and would add complication to the functions interface"
+  NodeGuid=F6A6F7D84C414F6282A565F748C881A7
   CustomProperties Pin (PinId=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,PinName="A",LinkedTo=(X 11111111111111111111111111111111))
   CustomProperties Pin (PinId=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB,PinName="B",LinkedTo=(Two 22222222222222222222222222222222))
   CustomProperties Pin (PinId=33333333333333333333333333333333,PinName="Output",Direction="EGPD_Output")
@@ -206,6 +207,14 @@ End Object`;
 
     expect(result.code).toContain("float multiply = (X * 2.0);");
     expect(result.code).not.toContain("a_controllable_power_node");
+    const symbol = result.editableSymbols.find((candidate) => candidate.name === "multiply");
+    expect(symbol?.id).toBe("Node:F6A6F7D84C414F6282A565F748C881A7:Output:33333333333333333333333333333333");
+
+    const renamed = analyzeClipboard(source, {
+      nameOverrides: new Map([[symbol!.id, "sharedFactor"]]),
+    });
+    expect(renamed.code).toContain("float sharedFactor = (X * 2.0);");
+    expect(renamed.code).not.toContain("float multiply =");
   });
 
   sampleIt("ignores detached Custom nodes", () => {
@@ -757,7 +766,9 @@ End Object`;
     ].join("\n");
 
     const result = analyzeClipboard(source);
-    expect(result.typeOverrideGroups[0].values[0].status).toBe("unknown");
+    const unknownOutput = result.typeOverrideGroups[0].values[0];
+    expect(unknownOutput.status).toBe("unknown");
+    expect(result.editableSymbols.some((symbol) => symbol.typeOverrideId === unknownOutput.id)).toBe(true);
   });
 
   it("keeps every unpacked output scoped to its external call instance", () => {

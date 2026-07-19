@@ -35,6 +35,13 @@ export interface PseudoHlslResult {
   diagnostics: Diagnostic[];
   typeOverrideGroups: TypeOverrideGroup[];
   staticSwitches: StaticSwitchControl[];
+  editableSymbols: EditableSymbol[];
+}
+
+export interface EditableSymbol {
+  id: string;
+  name: string;
+  typeOverrideId?: string;
 }
 
 export interface TypeOverrideValue {
@@ -52,6 +59,7 @@ export interface TypeOverrideGroup {
 }
 
 export type TypeOverrides = ReadonlyMap<string, MaterialType>;
+export type NameOverrides = ReadonlyMap<string, string>;
 
 export interface PseudoHlslOptions {
   bundleFormat: "readable" | "strict";
@@ -381,6 +389,7 @@ function generatePseudoHlslForOutputs(
   overrides: TypeOverrides = new Map(),
   options: PseudoHlslOptions = defaultPseudoHlslOptions,
   staticSwitchOverrides: StaticSwitchOverrides = new Map(),
+  nameOverrides: NameOverrides = new Map(),
 ): PseudoHlslResult {
   if (outputs.length === 0) throw new Error("At least one graph output is required.");
   const slice = sliceOutputs(graph, outputs.map((output) => output.id), staticSwitchOverrides);
@@ -432,6 +441,7 @@ function generatePseudoHlslForOutputs(
   const declarations: Declaration[] = [];
   const functionInputSymbols = new Set<string>();
   const usedNames = new Set<string>();
+  const editableSymbols = new Map<string, EditableSymbol>();
 
   const uniqueName = (preferred: string): string => {
     let candidate = preferred;
@@ -439,6 +449,24 @@ function generatePseudoHlslForOutputs(
     while (usedNames.has(candidate)) candidate = `${preferred}_${index++}`;
     usedNames.add(candidate);
     return candidate;
+  };
+
+  const symbolId = (node: GraphNode, pin: GraphPin): string =>
+    `Node:${node.nodeGuid ?? node.properties.get("MaterialExpressionGuid") ?? node.id}:Output:${pin.id}`;
+  const preferredName = (node: GraphNode, pin: GraphPin, fallback: string): string =>
+    nameOverrides.get(symbolId(node, pin)) ?? fallback;
+  const externalTypeOverrideId = (node: GraphNode, pin: GraphPin): string | undefined => {
+    if (node.kind !== "external-call") return undefined;
+    const index = outputPins(node).findIndex((candidate) => candidate.id === pin.id);
+    if (index < 0) return undefined;
+    return functionOutputId(node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction", index);
+  };
+  const registerSymbol = (node: GraphNode, pin: GraphPin, name: string): void => {
+    editableSymbols.set(symbolId(node, pin), {
+      id: symbolId(node, pin),
+      name,
+      typeOverrideId: externalTypeOverrideId(node, pin),
+    });
   };
 
   const linkedValue = (node: GraphNode, pin: GraphPin | undefined, fallbackProperty?: string): Value => {
@@ -924,8 +952,13 @@ function generatePseudoHlslForOutputs(
       const results = usedOutputPins.map((pin) => {
         const fact = typeInference.facts.get(outputKey(node.id, pin.id));
         const name = uniqueName(
-          terminalNamedRerouteName(node.id, pin) ?? externalResultBaseName(node, pin),
+          preferredName(
+            node,
+            pin,
+            terminalNamedRerouteName(node.id, pin) ?? externalResultBaseName(node, pin),
+          ),
         );
+        registerSymbol(node, pin, name);
         const value: Value = {
           code: name,
           type: fact?.type ?? "unknown",
@@ -971,7 +1004,11 @@ function generatePseudoHlslForOutputs(
       const authored = authoredName(node);
       const commentRegion = localCommentRegion(node);
       const commentName = authoredIdentifier(commentRegion?.text);
-      const name = uniqueName(authored ?? commentName ?? "constant3");
+      const primaryPin = nodeOutputPins[0];
+      const name = uniqueName(primaryPin
+        ? preferredName(node, primaryPin, authored ?? commentName ?? "constant3")
+        : authored ?? commentName ?? "constant3");
+      if (primaryPin) registerSymbol(node, primaryPin, name);
       declarations.push({
         code: `const float3 ${name} = ${vector(node.properties.get("Constant"), 3)};`,
         commentRegions: options.commentSections ? node.commentRegions : undefined,
@@ -1022,7 +1059,12 @@ function generatePseudoHlslForOutputs(
       const terminalName = node.kind !== "function-input" && !/Parameter$/.test(node.expressionClass)
         ? terminalNamedRerouteName(node.id, pin)
         : undefined;
-      const name = uniqueName(terminalName ?? authored ?? commentName ?? generatedBaseName);
+      const name = uniqueName(preferredName(
+        node,
+        pin,
+        terminalName ?? authored ?? commentName ?? generatedBaseName,
+      ));
+      registerSymbol(node, pin, name);
       const preamble = node.kind === "function-input" || functionInputSymbols.has(value.code);
       values.set(key, { code: name, type: value.type, confidence: value.confidence });
       declarations.push({
@@ -1177,7 +1219,13 @@ function generatePseudoHlslForOutputs(
     return aPriority - bPriority || a.name.localeCompare(b.name);
   });
 
-  return { code, diagnostics, typeOverrideGroups, staticSwitches: slice.staticSwitches };
+  return {
+    code,
+    diagnostics,
+    typeOverrideGroups,
+    staticSwitches: slice.staticSwitches,
+    editableSymbols: [...editableSymbols.values()],
+  };
 }
 
 export function generatePseudoHlsl(
@@ -1186,10 +1234,11 @@ export function generatePseudoHlsl(
   overrides: TypeOverrides = new Map(),
   options: PseudoHlslOptions = defaultPseudoHlslOptions,
   staticSwitchOverrides: StaticSwitchOverrides = new Map(),
+  nameOverrides: NameOverrides = new Map(),
 ): PseudoHlslResult {
   const output = graph.outputs.find((candidate) => candidate.id === outputId);
   if (!output) throw new Error(`Unknown graph output: ${outputId}`);
-  return generatePseudoHlslForOutputs(graph, [output], overrides, options, staticSwitchOverrides);
+  return generatePseudoHlslForOutputs(graph, [output], overrides, options, staticSwitchOverrides, nameOverrides);
 }
 
 export function generateAllPseudoHlsl(
@@ -1197,6 +1246,14 @@ export function generateAllPseudoHlsl(
   overrides: TypeOverrides = new Map(),
   options: PseudoHlslOptions = defaultPseudoHlslOptions,
   staticSwitchOverrides: StaticSwitchOverrides = new Map(),
+  nameOverrides: NameOverrides = new Map(),
 ): PseudoHlslResult {
-  return generatePseudoHlslForOutputs(graph, graph.outputs, overrides, options, staticSwitchOverrides);
+  return generatePseudoHlslForOutputs(
+    graph,
+    graph.outputs,
+    overrides,
+    options,
+    staticSwitchOverrides,
+    nameOverrides,
+  );
 }

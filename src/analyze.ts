@@ -9,6 +9,7 @@ import {
   generateAllPseudoHlsl,
   generatePseudoHlsl,
   type PseudoHlslOptions,
+  type EditableSymbol,
   type TypeOverrideGroup,
 } from "./pseudo-hlsl/generate";
 
@@ -23,6 +24,7 @@ export interface AnalysisRequest {
   outputId?: string;
   typeOverrides?: ReadonlyMap<string, MaterialType>;
   staticSwitchOverrides?: ReadonlyMap<string, boolean>;
+  nameOverrides?: ReadonlyMap<string, string>;
   formatting?: AnalysisFormatting;
 }
 
@@ -33,6 +35,7 @@ export interface AnalysisResult {
   diagnostics: Diagnostic[];
   typeOverrideGroups: TypeOverrideGroup[];
   staticSwitches: StaticSwitchControl[];
+  editableSymbols: EditableSymbol[];
   nodeCount: number;
 }
 
@@ -44,6 +47,7 @@ export function analyzeClipboard(
     outputId: requestedOutputId,
     typeOverrides = new Map(),
     staticSwitchOverrides = new Map(),
+    nameOverrides = new Map(),
     formatting = defaultAnalysisFormatting,
   } = request;
   const graph = resolveGraph(parseClipboard(source));
@@ -54,6 +58,7 @@ export function analyzeClipboard(
       diagnostics: graph.diagnostics,
       typeOverrideGroups: [],
       staticSwitches: [],
+      editableSymbols: [],
       nodeCount: graph.nodes.size,
     };
   }
@@ -69,8 +74,8 @@ export function analyzeClipboard(
         ? ALL_OUTPUTS_ID
         : graph.outputs[0].id;
   const generated = selectedOutputId === ALL_OUTPUTS_ID
-    ? generateAllPseudoHlsl(graph, typeOverrides, formatting, staticSwitchOverrides)
-    : generatePseudoHlsl(graph, selectedOutputId, typeOverrides, formatting, staticSwitchOverrides);
+    ? generateAllPseudoHlsl(graph, typeOverrides, formatting, staticSwitchOverrides, nameOverrides)
+    : generatePseudoHlsl(graph, selectedOutputId, typeOverrides, formatting, staticSwitchOverrides, nameOverrides);
   const outputs = graph.outputs.map(({ id, label }) => ({ id, label }));
   if (hasAllOutputs) outputs.unshift({ id: ALL_OUTPUTS_ID, label: "All outputs" });
   return {
@@ -80,6 +85,7 @@ export function analyzeClipboard(
     diagnostics: generated.diagnostics,
     typeOverrideGroups: generated.typeOverrideGroups,
     staticSwitches: generated.staticSwitches,
+    editableSymbols: generated.editableSymbols,
     nodeCount: graph.nodes.size,
   };
 }

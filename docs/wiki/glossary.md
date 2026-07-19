@@ -13,6 +13,8 @@ This page defines project-specific terms, workflows, and abbreviations. Use prec
 - `Minimum-width Type` - a lower bound proven by channel use without enough evidence for one exact vector size; rendered with a suffix such as `?float2+`.
 - `Unresolved Type` - a value for which the graph permits multiple types or provides no numeric evidence; rendered as `?type`.
 - `Type Override` - a user-confirmed type for an unresolved external Material Function output or Custom HLSL input. Function-output overrides are keyed by asset path and output index and apply to every matching call; Custom-input overrides are scoped to that Custom node and pin.
+- `Name Override` - a user-authored replacement for one generated pseudo-HLSL declaration name. It is keyed by the serialized Unreal node GUID and output pin ID, with a temporary node-ID fallback for incomplete clipboard text, and retained only in the active browser session.
+- `Editable Symbol` - generator metadata connecting a rendered pseudo-HLSL declaration to its stable Name Override key and, where applicable, its Type Override target.
 - `Static Switch Override` - a user-selected compile-time boolean keyed by the serialized static source; every relevant Static Switch sharing that source uses the same specialization.
 - `Named Reroute` - Unreal's declaration/usage pair for routing one value without a visible wire; usages are linked to declarations by node reference or GUID during Graph IR resolution.
 - `Comment Region` - a serialized Unreal comment rectangle preserved in an outer-to-inner hierarchy. After declaration planning it becomes a large section, a local `//` annotation, or the lowest-priority authored result name according to how much code survives inside it.

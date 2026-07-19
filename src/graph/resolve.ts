@@ -133,6 +133,7 @@ function resolveNode(object: RawObject): GraphNode | undefined {
   }
   return {
     id: object.name,
+    nodeGuid: object.properties.get("NodeGuid")?.value,
     expressionClass: className,
     kind: nodeKind(className),
     properties,
