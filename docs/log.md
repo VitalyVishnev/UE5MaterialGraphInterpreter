@@ -231,3 +231,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Added an indexable title, description, canonical URL, and `WebApplication` JSON-LD to the deployed document.
 - Added public `robots.txt` and sitemap files, a compact explanatory site footer, and a GitHub repository link beside the analysis status.
 - Added the owner-supplied Google Search Console verification tag.
+
+## 2026-07-19 - Social preview connected
+
+- Promoted the approved non-generative graph-to-code card to `public/social-preview.png`.
+- Added Open Graph and Twitter Card metadata with the deployed absolute image URL.
