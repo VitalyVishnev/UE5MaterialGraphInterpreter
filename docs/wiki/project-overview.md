@@ -14,6 +14,6 @@ The browser application now accepts full and partial clipboard text, discovers o
 
 The advanced registry also recognizes all captured scalar Noise and Vector Noise modes plus the parameterless Scalar Blue Noise source, including mode-dependent `float3`/`float4` outputs.
 
-The repository root now has a product-facing [README](../../README.md) organized around graph-to-pseudo-HLSL conversion, shader debugging, technical-artist collaboration, and AI-assisted review. Paired Unreal-graph and generated-code screenshots are intentionally deferred until project-owned images are supplied.
+The repository root now has a product-facing [README](../../README.md) organized around graph-to-pseudo-HLSL conversion, shader debugging, technical-artist collaboration, and AI-assisted review. Its graph-to-interpreter composite appears in the `From graph math to readable code` section and is stored at [material-graph-to-pseudo-hlsl.png](../images/material-graph-to-pseudo-hlsl.png).
 
 See [Architecture](architecture.md), [Decisions](decisions.md), [Known Bugs](known-bugs.md), [Experiments](experiments.md), and [Glossary](glossary.md) for the maintained project memory.

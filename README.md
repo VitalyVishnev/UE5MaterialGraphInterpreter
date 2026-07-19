@@ -38,7 +38,7 @@ The output updates immediately when you select another Function Output, change a
 
 ## From graph math to readable code
 
-<!-- README screenshot slot: simple function in graph and in interpreter -->
+![Unreal Material Graph above its interpreted pseudo-HLSL](docs/images/material-graph-to-pseudo-hlsl.png)
 
 The goal is not byte-for-byte Unreal HLSL. The goal is a stable, compact description of the graph's logic.
 
@@ -77,7 +77,7 @@ Unresolved external function outputs and Custom HLSL inputs appear in **Type ove
 The interpreter prefers graph-author intent over temporary Unreal node IDs. When several names are available, the effective priority is:
 
 1. Named Reroute that deliberately renames the value;
-2. Function Input, Function Output, parameter, node `Description`, or Node Comment;
+2. Function Input, Function Output, parameter, or a short label-like node `Description` / Node Comment;
 3. a Comment Region containing exactly one surviving declaration;
 4. an external function's named output pin;
 5. a semantic operation or expression name such as `normalize`, `worldPosition`, or `vectorNoise`;

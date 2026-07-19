@@ -142,6 +142,72 @@ End Object`;
     expect(simplified.code).toContain("float Result = (X + 3.0);");
   });
 
+  it("does not turn prose node descriptions into variable names", () => {
+    const source = `
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Output"
+  Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="OutputExpression"
+  End Object
+  Begin Object Name="OutputExpression"
+    OutputName="Result"
+  End Object
+  CustomProperties Pin (PinId=99999999999999999999999999999999,PinName="Input",LinkedTo=(FinalAdd 88888888888888888888888888888888))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="X"
+  Begin Object Class=/Script/Engine.MaterialExpressionFunctionInput Name="XExpression"
+  End Object
+  Begin Object Name="XExpression"
+    InputName="X"
+    InputType=FunctionInput_Scalar
+  End Object
+  CustomProperties Pin (PinId=11111111111111111111111111111111,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Two"
+  Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="TwoExpression"
+  End Object
+  Begin Object Name="TwoExpression"
+    R=2.0
+  End Object
+  CustomProperties Pin (PinId=22222222222222222222222222222222,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="SharedMultiply"
+  Begin Object Class=/Script/Engine.MaterialExpressionMultiply Name="SharedMultiplyExpression"
+  End Object
+  Begin Object Name="SharedMultiplyExpression"
+    Desc="a controllable power node is expensive and would add complication to the functions interface"
+  End Object
+  NodeComment="a controllable power node is expensive and would add complication to the functions interface"
+  CustomProperties Pin (PinId=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,PinName="A",LinkedTo=(X 11111111111111111111111111111111))
+  CustomProperties Pin (PinId=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB,PinName="B",LinkedTo=(Two 22222222222222222222222222222222))
+  CustomProperties Pin (PinId=33333333333333333333333333333333,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="AddA"
+  Begin Object Class=/Script/Engine.MaterialExpressionAdd Name="AddAExpression"
+  End Object
+  CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC,PinName="A",LinkedTo=(SharedMultiply 33333333333333333333333333333333))
+  CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD,PinName="B",DefaultValue="1.0")
+  CustomProperties Pin (PinId=44444444444444444444444444444444,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="AddB"
+  Begin Object Class=/Script/Engine.MaterialExpressionAdd Name="AddBExpression"
+  End Object
+  CustomProperties Pin (PinId=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE,PinName="A",LinkedTo=(SharedMultiply 33333333333333333333333333333333))
+  CustomProperties Pin (PinId=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,PinName="B",DefaultValue="2.0")
+  CustomProperties Pin (PinId=55555555555555555555555555555555,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="FinalAdd"
+  Begin Object Class=/Script/Engine.MaterialExpressionAdd Name="FinalAddExpression"
+  End Object
+  CustomProperties Pin (PinId=66666666666666666666666666666666,PinName="A",LinkedTo=(AddA 44444444444444444444444444444444))
+  CustomProperties Pin (PinId=77777777777777777777777777777777,PinName="B",LinkedTo=(AddB 55555555555555555555555555555555))
+  CustomProperties Pin (PinId=88888888888888888888888888888888,PinName="Output",Direction="EGPD_Output")
+End Object`;
+
+    const result = analyzeClipboard(source);
+
+    expect(result.code).toContain("float multiply = (X * 2.0);");
+    expect(result.code).not.toContain("a_controllable_power_node");
+  });
+
   sampleIt("ignores detached Custom nodes", () => {
     const source = readFileSync(
       resolve(

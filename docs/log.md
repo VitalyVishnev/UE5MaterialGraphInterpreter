@@ -214,3 +214,14 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 
 - Added local SVG badges that mirror the interpreter's confirmed, inferred, minimum-width, and unresolved type colors.
 - Kept textual meanings and accessible image descriptions so certainty is not communicated by color alone.
+
+## 2026-07-19 - Prose descriptions excluded from identifiers
+
+- Limited `Description`, `Desc`, and `NodeComment` naming evidence to concise label-like text.
+- Preserved long explanatory text in Graph IR properties while falling back to semantic operation names in pseudo-HLSL.
+
+## 2026-07-19 - README graph-to-code composite prepared
+
+- Combined the supplied Unreal Material Graph and interpreter screenshots into one non-generative README asset.
+- Preserved both source images proportionally and placed inferred-type-colored label blocks without covering the interpreted code.
+- Added the approved composite to the README's `From graph math to readable code` section.

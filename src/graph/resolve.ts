@@ -108,12 +108,24 @@ function nodeKind(className: string): GraphNodeKind {
   return "expression";
 }
 
+function conciseDescription(value: string | undefined): string | undefined {
+  const text = value?.trim();
+  if (!text || text.length > 48 || text.split(/\s+/).length > 6 || /[.!?;\r\n]/.test(text)) {
+    return undefined;
+  }
+  return text;
+}
+
 function resolveNode(object: RawObject): GraphNode | undefined {
   if (!object.name || !object.className?.includes("MaterialGraphNode")) return undefined;
   const declaration = expressionDeclaration(object);
   const className = expressionClass(object, declaration);
   const properties = expressionProperties(object, declaration);
   const nodeComment = object.properties.get("NodeComment");
+  const descriptiveName =
+    conciseDescription(properties.get("Description")) ??
+    conciseDescription(properties.get("Desc")) ??
+    conciseDescription(nodeComment ? decodeValue(nodeComment.value) : undefined);
   const pins: GraphPin[] = [];
   for (const property of object.propertyList) {
     const pin = parsePin(property.raw);
@@ -130,9 +142,7 @@ function resolveNode(object: RawObject): GraphNode | undefined {
       properties.get("InputName") ??
       properties.get("OutputName") ??
       properties.get("ParameterName") ??
-      properties.get("Description") ??
-      properties.get("Desc") ??
-      (nodeComment ? decodeValue(nodeComment.value) : undefined),
+      descriptiveName,
   };
 }
 

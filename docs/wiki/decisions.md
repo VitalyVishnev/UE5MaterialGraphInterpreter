@@ -287,6 +287,8 @@ Classify Comment Regions after declaration planning, when inlined expressions an
 
 Local Comment Region naming has lower priority than Function Input and Parameter contracts, final Named Reroutes, `Description`, `Desc`, and `NodeComment`. It has higher priority only than generated operation names. Disabling `Graph comment sections` disables section rendering, local annotations, and Comment Region naming together.
 
+`Description`, `Desc`, and `NodeComment` participate in variable naming only when they look like concise labels: at most 48 characters and six words, without sentence punctuation or line breaks. Longer explanatory prose remains preserved in parsed properties but falls through to the next naming source instead of becoming an identifier.
+
 Hoist Function Inputs and direct aliases of Function Inputs into one preamble so data-flow transitions do not repeat large section headers. Preserve dependency order for all computed declarations.
 
 Keep structured call and top-level operator metadata through translation. The `Wrap complex calls and formulas` option renders standalone calls with at least three arguments one argument per line and splits long nested binary formulas at their top-level operator. The independent `Space out complex operations` option adds blank-line separation around those declarations and expanded Custom HLSL blocks. Simple arithmetic stays compact. Calls embedded inside arithmetic remain inline.
