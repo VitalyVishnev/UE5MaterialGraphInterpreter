@@ -1,0 +1,113 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`stable user-visible analysis > covers supported, partial, opaque, and broken inputs > broken 1`] = `
+{
+  "code": "// Pseudo-HLSL: semantic approximation of the connected Unreal graph.
+// ERROR: Object MaterialGraphNode_28 is missing End Object.
+// ERROR: Object MaterialExpressionConstant_6 is missing End Object.
+// WARNING: Input "Input" on FunctionOutput comes from outside this clipboard selection.
+// WARNING: Input "B" on Divide comes from outside this clipboard selection.
+// WARNING: Input "Preview" on Number of waves comes from outside this clipboard selection.
+
+?type Result = unresolved_output;
+
+return Result;",
+  "diagnostics": [
+    {
+      "code": "incomplete-object",
+      "severity": "error",
+    },
+    {
+      "code": "incomplete-object",
+      "severity": "error",
+    },
+    {
+      "code": "unresolved-link",
+      "severity": "warning",
+    },
+    {
+      "code": "unresolved-link",
+      "severity": "warning",
+    },
+    {
+      "code": "unresolved-link",
+      "severity": "warning",
+    },
+  ],
+}
+`;
+
+exports[`stable user-visible analysis > covers supported, partial, opaque, and broken inputs > opaque 1`] = `
+{
+  "code": "// Pseudo-HLSL: semantic approximation of the connected Unreal graph.
+// WARNING: Material Function ScreenAlignedPixelToPixelUVs at MaterialFunction'"/Engine/Functions/Engine_MaterialFunctions02/Texturing/ScreenAlignedPixelToPixelUVs.ScreenAlignedPixelToPixelUVs"' is not expanded; rendered as ScreenAlignedPixelToPixelUVs(...).
+// WARNING: Custom HLSL node "TemporalAA SampleID" is preserved as an opaque call.
+// WARNING: Custom HLSL node "Custom Node 1" is preserved as an opaque call.
+
+float Alpha_Threshold; // Function input
+float Random; // Function input
+
+float PixelStepScale = 1.0;
+float2 screenAlignedPixelToPixelUVs = ScreenAlignedPixelToPixelUVs(float2(PixelStepScale, PixelStepScale));
+float2 TemporalAA_SampleID = Custom_TemporalAA_SampleID();
+float custom = CustomNode_1((screenAlignedPixelToPixelUVs + TemporalAA_SampleID.r));
+float PixelScale = 8.0;
+float2 screenAlignedPixelToPixelUVs_2 = ScreenAlignedPixelToPixelUVs(float2(PixelScale, PixelScale));
+float textureSample = TextureSample(Texture: Texture2D_Game_CatContent_Effects_Textures_T_BayerMatrix_T_BayerMatrix, UVs: screenAlignedPixelToPixelUVs_2).r;
+
+float Result = ((Alpha_Threshold + ((custom + (textureSample * Random)) / 6.0)) + -0.5);
+
+return Result;",
+  "diagnostics": [
+    {
+      "code": "external-function",
+      "severity": "warning",
+    },
+    {
+      "code": "opaque-custom",
+      "severity": "warning",
+    },
+    {
+      "code": "opaque-custom",
+      "severity": "warning",
+    },
+    {
+      "code": "external-function",
+      "severity": "warning",
+    },
+  ],
+}
+`;
+
+exports[`stable user-visible analysis > covers supported, partial, opaque, and broken inputs > partial 1`] = `
+{
+  "code": "// Pseudo-HLSL: semantic approximation of the connected Unreal graph.
+// WARNING: Input "A" on LinearInterpolate comes from outside this clipboard selection.
+
+float3 LinearInterpolate = lerp(
+    external_MaterialGraphNode_10_A,
+    float3(0.0, 0.0, 0.0),
+    SceneTexture(PPI_PostProcessInput0).rgb
+);
+",
+  "diagnostics": [
+    {
+      "code": "unresolved-link",
+      "severity": "warning",
+    },
+  ],
+}
+`;
+
+exports[`stable user-visible analysis > covers supported, partial, opaque, and broken inputs > supported 1`] = `
+{
+  "code": "// Pseudo-HLSL: semantic approximation of the connected Unreal graph.
+float3 Emissive_Color = lerp(
+    SceneTexture(PPI_StoredBaseColor).rgb,
+    float3(0.0, 0.0, 0.0),
+    SceneTexture(PPI_PostProcessInput0).rgb
+);
+",
+  "diagnostics": [],
+}
+`;

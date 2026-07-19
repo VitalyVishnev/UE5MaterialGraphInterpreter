@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UE Material Sample Capture</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: Canvas; color: CanvasText; }
+    main { max-width: 1080px; margin: auto; padding: 24px; }
+    h1 { margin: 0 0 6px; font-size: 1.5rem; }
+    p { margin: 0 0 18px; color: color-mix(in srgb, CanvasText 72%, Canvas); }
+    fieldset { margin: 0 0 16px; padding: 16px; border: 1px solid color-mix(in srgb, CanvasText 25%, Canvas); border-radius: 8px; }
+    legend { padding: 0 6px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    label { display: grid; gap: 5px; font-size: .92rem; }
+    input, textarea, select, button { font: inherit; }
+    input, textarea, select { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid color-mix(in srgb, CanvasText 35%, Canvas); border-radius: 5px; background: Canvas; color: CanvasText; }
+    textarea { min-height: 112px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .8rem; line-height: 1.35; }
+    #fullClipboard { min-height: 260px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    button { padding: 9px 13px; border: 1px solid color-mix(in srgb, CanvasText 40%, Canvas); border-radius: 5px; background: ButtonFace; color: ButtonText; cursor: pointer; }
+    button.primary { background: Highlight; color: HighlightText; border-color: Highlight; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    #status { min-height: 1.3em; margin: 0; font-size: .9rem; }
+    #status.error { color: #b42318; }
+    #status.success { color: #167342; }
+    .hint { font-size: .82rem; color: color-mix(in srgb, CanvasText 62%, Canvas); }
+    @media (max-width: 720px) { .grid, .two { grid-template-columns: 1fr; } main { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>UE Material Sample Capture</h1>
+    <p>Сохраняет исходный UE clipboard, корректные частичные копии и намеренно повреждённые варианты в одну папку sample.</p>
+
+    <fieldset>
+      <legend>Описание sample</legend>
+      <div class="grid two">
+        <label>Название папки
+          <input id="title" required placeholder="MF_GerstnerWaves">
+        </label>
+        <label>Версия Unreal Engine
+          <input id="engineVersion" value="4.26" placeholder="5.6">
+        </label>
+        <label>Источник / ссылка
+          <input id="source" placeholder="https://...">
+        </label>
+        <label>Тип графа
+          <select id="graphKind">
+            <option>Material Function</option>
+            <option>Material</option>
+            <option>Unknown</option>
+          </select>
+        </label>
+      </div>
+      <label style="margin-top:12px">Краткое описание и ожидаемая математика
+        <textarea id="description" placeholder="Что делает функция и что важно проверить в её восстановлении."></textarea>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Полный clipboard</legend>
+      <label>Ctrl+C из Unreal Engine
+        <textarea id="fullClipboard" spellcheck="false" placeholder="Begin Object Class=/Script/UnrealEd.MaterialGraphNode ..."></textarea>
+      </label>
+      <p class="hint">Из него будут автоматически созданы два синтаксически оборванных варианта: без начала и без конца.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Корректные частичные копии (необязательно)</legend>
+      <p class="hint">Копируйте каждый фрагмент отдельным Ctrl+C в Unreal, а не ручным удалением строк.</p>
+      <div class="grid">
+        <label>Часть 1
+          <textarea class="partial" spellcheck="false" placeholder="Начало, середина или конец графа"></textarea>
+        </label>
+        <label>Часть 2
+          <textarea class="partial" spellcheck="false"></textarea>
+        </label>
+        <label>Часть 3
+          <textarea class="partial" spellcheck="false"></textarea>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Повреждённые варианты</legend>
+      <div class="row">
+        <label class="row"><input id="makeBroken" type="checkbox" checked> Создать варианты без начала и без конца</label>
+        <label>Удалить из каждой стороны
+          <select id="trimPercent">
+            <option value="25">25%</option>
+            <option value="50" selected>50%</option>
+            <option value="75">75%</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="row">
+      <button id="chooseFolder" type="button">Выбрать папку</button>
+      <button id="save" class="primary" type="button" disabled>Сохранить sample</button>
+      <span id="folderLabel" class="hint">Папка не выбрана</span>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const folderLabel = $("folderLabel");
+      const status = $("status");
+      const saveButton = $("save");
+      let destinationDirectory = null;
+
+      function setStatus(message, kind = "") {
+        status.textContent = message;
+        status.className = kind;
+      }
+
+      function safeFolderName(value) {
+        const cleaned = value.trim().replace(/[<>:"/\\|?*\u0000-\u001F]/g, "").replace(/\s+/g, "_").replace(/[. ]+$/g, "");
+        return cleaned || "unnamed_sample";
+      }
+
+      function clipboardLineCount(value) {
+        return value ? value.split(/\r?\n/).length : 0;
+      }
+
+      function createBrokenClipboard(text, direction, percent) {
+        const lines = text.split(/\r?\n/);
+        const amount = Math.max(1, Math.floor(lines.length * percent / 100));
+        return direction === "start" ? lines.slice(amount).join("\n") : lines.slice(0, Math.max(1, lines.length - amount)).join("\n");
+      }
+
+      function collectFiles() {
+        const title = $("title").value.trim();
+        const full = $("fullClipboard").value;
+        const hasFull = Boolean(full.trim());
+        const partials = [...document.querySelectorAll(".partial")].map((field) => field.value).filter((value) => value.trim());
+        if (!title) throw new Error("Укажите название папки.");
+        if (!hasFull && partials.length === 0) throw new Error("Добавьте полный clipboard или хотя бы одну частичную копию.");
+
+        const prefix = safeFolderName(title);
+        const info = [
+          `Title: ${title}`,
+          `UE Version: ${$("engineVersion").value.trim() || "Unspecified"}`,
+          `Graph Type: ${$("graphKind").value}`,
+          `Source: ${$("source").value.trim() || "Unspecified"}`,
+          `Full Clipboard: ${hasFull ? "present" : "absent"}`,
+          `Partial Clipboards: ${partials.length}`,
+          "",
+          "Description:",
+          $("description").value.trim() || "Unspecified",
+          "",
+          "Generated files:",
+        ];
+        const files = [];
+        if (hasFull) files.push({ name: `${prefix}_full_clipboard.txt`, text: full });
+        partials.forEach((text, index) => files.push({ name: `${prefix}_partial_${index + 1}_clipboard.txt`, text }));
+        if (hasFull && $("makeBroken").checked) {
+          const percent = Number($("trimPercent").value);
+          files.push({ name: `${prefix}_broken_missing_first_${percent}pct.txt`, text: createBrokenClipboard(full, "start", percent) });
+          files.push({ name: `${prefix}_broken_missing_last_${percent}pct.txt`, text: createBrokenClipboard(full, "end", percent) });
+        }
+        files.forEach((file) => info.push(`- ${file.name} (${clipboardLineCount(file.text)} lines)`));
+        files.unshift({ name: "info.txt", text: info.join("\n") + "\n" });
+        return { folder: prefix, files };
+      }
+
+      async function writeFile(directory, file) {
+        const handle = await directory.getFileHandle(file.name, { create: true });
+        const stream = await handle.createWritable();
+        await stream.write(file.text);
+        await stream.close();
+      }
+
+      $("chooseFolder").addEventListener("click", async () => {
+        if (!("showDirectoryPicker" in window)) {
+          setStatus("Нужен Chromium-браузер с File System Access API: Chrome или Edge.", "error");
+          return;
+        }
+        try {
+          destinationDirectory = await window.showDirectoryPicker({ mode: "readwrite" });
+          folderLabel.textContent = `Выбрано: ${destinationDirectory.name}`;
+          saveButton.disabled = false;
+          setStatus("Папка выбрана.");
+        } catch (error) {
+          if (error.name !== "AbortError") setStatus(`Не удалось выбрать папку: ${error.message}`, "error");
+        }
+      });
+
+      saveButton.addEventListener("click", async () => {
+        try {
+          const sample = collectFiles();
+          let sampleDirectory;
+          try {
+            sampleDirectory = await destinationDirectory.getDirectoryHandle(sample.folder);
+            if (!window.confirm(`Папка ${sample.folder} уже существует. Перезаписать одноимённые файлы?`)) return;
+          } catch (error) {
+            if (error.name !== "NotFoundError") throw error;
+            sampleDirectory = await destinationDirectory.getDirectoryHandle(sample.folder, { create: true });
+          }
+          saveButton.disabled = true;
+          setStatus("Сохранение...");
+          for (const file of sample.files) await writeFile(sampleDirectory, file);
+          setStatus(`Готово: ${sample.folder} — ${sample.files.length} файлов.`, "success");
+        } catch (error) {
+          setStatus(`Не удалось сохранить: ${error.message}`, "error");
+        } finally {
+          saveButton.disabled = destinationDirectory === null;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,929 @@
+{
+    "schemaVersion": 1,
+    "analysisMethod": "text-source-only; no build, no editor run, no uasset parsing",
+    "engine": {
+        "majorVersion": 5,
+        "minorVersion": 8,
+        "patchVersion": 0,
+        "branchName": "UE5",
+        "repositoryCommit": "667bbca26dd195708d71f5ce34001f3ef3788679"
+    },
+    "normalizedTypes": [ "float", "float2", "float3", "float4", "bool", "static-bool", "texture2d", "texture-cube", "material-attributes", "unknown" ],
+    "materialExpressions": [
+        {
+            "class": "MaterialExpressionConstant",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float",
+                        "input": null,
+                        "explanation": "Compile emits Compiler->Constant(R); scalar constants are MCT_Float/MCT_Float1 in the legacy material compiler."
+                    }
+                }
+            ],
+            "pseudoHlsl": "{R}",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionConstant::Compile",
+                    "lines": "5066-5069",
+                    "claim": "The expression compiles by returning Compiler->Constant(R)."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionConstant2Vector",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float2",
+                        "input": null,
+                        "explanation": "Compile emits Compiler->Constant2(R,G). Additional constructor outputs are masks declared in Outputs metadata and are handled by component-mask rules."
+                    }
+                }
+            ],
+            "pseudoHlsl": "float2({R},{G})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionConstant2Vector::Compile",
+                    "lines": "5100-5103",
+                    "claim": "The expression compiles by returning Compiler->Constant2(R,G)."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionConstant2Vector constructor",
+                    "lines": "5092-5095",
+                    "claim": "Extra outputs are explicit masked FExpressionOutput entries."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionConstant3Vector",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float3",
+                        "input": null,
+                        "explanation": "Compile emits Compiler->Constant3(R,G,B). Additional outputs are fixed masks from Outputs metadata."
+                    }
+                }
+            ],
+            "pseudoHlsl": "float3({R},{G},{B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionConstant3Vector::Compile",
+                    "lines": "5135-5138",
+                    "claim": "The expression compiles by returning Compiler->Constant3."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionConstant3Vector constructor",
+                    "lines": "5126-5130",
+                    "claim": "Extra outputs are explicit masked FExpressionOutput entries."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionConstant4Vector",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float4",
+                        "input": null,
+                        "explanation": "Compile emits Compiler->Constant4(R,G,B,A). Named outputs R/G/B/A/RGB are component-mask outputs declared in metadata."
+                    }
+                }
+            ],
+            "pseudoHlsl": "float4({R},{G},{B},{A})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionConstant4Vector::Compile",
+                    "lines": "5173-5176",
+                    "claim": "The expression compiles by returning Compiler->Constant4."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionConstant4Vector constructor",
+                    "lines": "5161-5168",
+                    "claim": "RGBA/R/G/B/A/RGB outputs are declared as masked FExpressionOutput entries."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionAdd",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "arithmetic-promotion",
+                        "type": null,
+                        "input": "A,B",
+                        "explanation": "Compile calls Compiler->Add(A,B). The translator computes ResultType via GetArithmeticResultType: equal primitive types are preserved; scalar float promotes to the other float/LWC vector; incompatible primitive sizes error and return unknown."
+                    }
+                }
+            ],
+            "pseudoHlsl": "({A} + {B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionAdd::Compile",
+                    "lines": "4707-4715",
+                    "claim": "The expression delegates to Compiler->Add."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Add",
+                    "lines": "9484-9498",
+                    "claim": "Add uses GetArithmeticResultType for the emitted chunk type."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::GetArithmeticResultType",
+                    "lines": "4221-4260",
+                    "claim": "Arithmetic promotion and arithmetic type errors are defined here."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionSubtract",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "arithmetic-promotion",
+                        "type": null,
+                        "input": "A,B",
+                        "explanation": "Compile calls Compiler->Sub(A,B), whose result type is the arithmetic promotion of A and B."
+                    }
+                }
+            ],
+            "pseudoHlsl": "({A} - {B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionSubtract::Compile",
+                    "lines": "4759-4767",
+                    "claim": "The expression delegates to Compiler->Sub."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Sub",
+                    "lines": "9520-9533",
+                    "claim": "Sub uses GetArithmeticResultType for the emitted chunk type."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionMultiply",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "arithmetic-promotion",
+                        "type": null,
+                        "input": "A,B",
+                        "explanation": "Compile calls Compiler->Mul(A,B), and Mul computes ResultType using GetArithmeticResultType."
+                    }
+                }
+            ],
+            "pseudoHlsl": "({A} * {B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionMultiply::Compile",
+                    "lines": "4727-4735",
+                    "claim": "The expression delegates to Compiler->Mul."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Mul",
+                    "lines": "9574-9586",
+                    "claim": "Mul obtains ResultType from GetArithmeticResultType and rejects unknown."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionDivide",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "arithmetic-promotion",
+                        "type": null,
+                        "input": "A,B",
+                        "explanation": "Compile calls Compiler->Div(A,B); Div computes ResultType using GetArithmeticResultType, with constant folding shortcuts preserving/casting to that result."
+                    }
+                }
+            ],
+            "pseudoHlsl": "({A} / {B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionDivide::Compile",
+                    "lines": "4744-4752",
+                    "claim": "The expression delegates to Compiler->Div."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Div",
+                    "lines": "9646-9668",
+                    "claim": "Div obtains ResultType from GetArithmeticResultType and uses it for constant shortcuts."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionDotProduct",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float",
+                        "input": "A,B",
+                        "explanation": "Compile calls Compiler->Dot. Translator returns scalar float (or LWC scalar internally for LWC zero constants); normalized public type is float. Input dimensional compatibility is compile-checked."
+                    }
+                }
+            ],
+            "pseudoHlsl": "dot({A},{B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionDotProduct::Compile",
+                    "lines": "5370-5388",
+                    "claim": "The expression delegates to Compiler->Dot after missing-input checks."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Dot",
+                    "lines": "9713-9735",
+                    "claim": "Dot inspects input types and emits a scalar result for constants/uniform handling."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionCrossProduct",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float3",
+                        "input": "A,B",
+                        "explanation": "Compile calls Compiler->Cross. Translator requires 3-component-compatible inputs and emits MCT_Float3 for uniform cross; invalid 1/2 component result errors."
+                    }
+                }
+            ],
+            "pseudoHlsl": "cross({A},{B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionCrossProduct::Compile",
+                    "lines": "5398-5417",
+                    "claim": "The expression delegates to Compiler->Cross after missing-input checks."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Cross",
+                    "lines": "9779-9805",
+                    "claim": "Cross validates component count and emits MCT_Float3 for valid uniform expressions."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionAppendVector",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "append",
+                        "type": null,
+                        "input": "A,B",
+                        "explanation": "Result component count is NumComponents(A)+NumComponents(B); >4 is an error. Normalized type is float/float2/float3/float4 according to the resulting count, or unknown for unsupported/internal LWC details."
+                    }
+                }
+            ],
+            "pseudoHlsl": "floatN({A},{B})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionAppendVector::Compile",
+                    "lines": "6016-6034",
+                    "claim": "The expression delegates to Compiler->AppendVector."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::AppendVector",
+                    "lines": "10881-10904",
+                    "claim": "Append computes component counts, rejects >4, and chooses vector result type."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionComponentMask",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "component-mask",
+                        "type": null,
+                        "input": "Input",
+                        "explanation": "Result type is determined by enabled R/G/B/A count: one channel -> float, two -> float2, three -> float3, four -> float4. Too many channels for the source type is a compile error."
+                    }
+                }
+            ],
+            "pseudoHlsl": "{Input}.{mask}",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionComponentMask::Compile",
+                    "lines": "5438-5451",
+                    "claim": "The expression delegates to Compiler->ComponentMask."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::ComponentMask",
+                    "lines": "10767-10810",
+                    "claim": "ComponentMask validates source components and maps mask channel count to result type."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionCosine",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "Input",
+                        "explanation": "Compile wraps input in optional period scaling and calls Compiler->Cosine. Legacy translator returns MCT_Float for uniform expressions via CoerceParameter(X,MCT_Float), but returns GetParameterType(X) for non-uniform non-analytic path; analytic derivative path is delegated to derivative autogen."
+                    }
+                }
+            ],
+            "pseudoHlsl": "cos({Input})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionCosine::Compile",
+                    "lines": "5740-5748",
+                    "claim": "The expression delegates to Compiler->Cosine with optional period scaling."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Cosine",
+                    "lines": "5374-5395",
+                    "claim": "Uniform path emits MCT_Float; non-uniform legacy path preserves GetParameterType(X)."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionSine",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "Input",
+                        "explanation": "Compile calls Compiler->Sine after optional period scaling. Legacy translator returns MCT_Float for uniform inputs and GetParameterType(X) for non-uniform non-analytic path; analytic derivative path is delegated."
+                    }
+                }
+            ],
+            "pseudoHlsl": "sin({Input})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionSine::Compile",
+                    "lines": "5722-5730",
+                    "claim": "The expression delegates to Compiler->Sine with optional period scaling."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Sine",
+                    "lines": "5350-5369",
+                    "claim": "Uniform path emits MCT_Float; non-uniform legacy path preserves GetParameterType(X)."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionSquareRoot",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "same-as-input",
+                        "type": null,
+                        "input": "Input",
+                        "explanation": "Compile delegates to Compiler->SquareRoot. Translator emits GetParameterType(X) for uniform path and derivative/non-uniform sqrt expression with the input type."
+                    }
+                }
+            ],
+            "pseudoHlsl": "sqrt({Input})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionSquareRoot::Compile",
+                    "lines": "10476-10483",
+                    "claim": "The expression delegates to Compiler->SquareRoot."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::SquareRoot",
+                    "lines": "9998-10015",
+                    "claim": "SquareRoot emits the input parameter type for uniform path and delegates the same unary operation otherwise."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionPower",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "arithmetic-promotion",
+                        "type": null,
+                        "input": "Base,Exponent",
+                        "explanation": "Compile delegates to Compiler->Power. Translator validates Base and Exponent with GetArithmeticResultType; when exponent is a known constant, result can collapse to Base/constant cases, otherwise pow typing follows numeric compatibility."
+                    }
+                }
+            ],
+            "pseudoHlsl": "pow({Base},{Exponent})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionPower::Compile",
+                    "lines": "10853-10866",
+                    "claim": "The expression delegates to Compiler->Power."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Power",
+                    "lines": "9817-9845",
+                    "claim": "Power validates arithmetic result type before constant exponent optimizations."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionFrac",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "same-as-input",
+                        "type": null,
+                        "input": "Input",
+                        "explanation": "Compile delegates to Compiler->Frac; translator emits GetParameterType(X) for uniform path and derivative/non-uniform frac operation otherwise."
+                    }
+                }
+            ],
+            "pseudoHlsl": "frac({Input})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionFrac::Compile",
+                    "lines": "7908-7916",
+                    "claim": "The expression delegates to Compiler->Frac."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Frac",
+                    "lines": "5759-5778",
+                    "claim": "Frac emits GetParameterType(X) for uniform path and delegates unary frac otherwise."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionNormalize",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "same-as-input",
+                        "type": null,
+                        "input": "VectorInput",
+                        "explanation": "Compile delegates to Compiler->Normalize. Translator uses MakeNonLWCType(GetParameterType(X)); normalized scalar/vector dimension is preserved, while LWC is converted to non-LWC float type."
+                    }
+                }
+            ],
+            "pseudoHlsl": "normalize({VectorInput})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionNormalize::Compile",
+                    "lines": "9996-10003",
+                    "claim": "The expression delegates to Compiler->Normalize."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Normalize",
+                    "lines": "10048-10070",
+                    "claim": "Normalize result type is MakeNonLWCType(GetParameterType(X))."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionOneMinus",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "arithmetic-promotion",
+                        "type": null,
+                        "input": "Input",
+                        "explanation": "Compile is Compiler->Sub(Constant(1.0f), Input). Result follows Sub arithmetic promotion: scalar float promotes to the input numeric vector type."
+                    }
+                }
+            ],
+            "pseudoHlsl": "(1 - {Input})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionOneMinus::Compile",
+                    "lines": "11170-11177",
+                    "claim": "The expression is implemented as scalar one minus input using Compiler->Sub."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::GetArithmeticResultType",
+                    "lines": "4250-4257",
+                    "claim": "Scalar float input promotes to the other operand's type."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionLinearInterpolate",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "arithmetic-promotion",
+                        "type": null,
+                        "input": "A,B,Alpha",
+                        "explanation": "Compile delegates to Compiler->Lerp(A,B,Alpha). Result depends on X/Y arithmetic compatibility and Alpha handling in translator, so static rule is numeric promotion/context-dependent for nontrivial alpha shapes."
+                    }
+                }
+            ],
+            "pseudoHlsl": "lerp({A},{B},{Alpha})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionLinearInterpolate::Compile",
+                    "lines": "4839-4849",
+                    "claim": "The expression delegates to Compiler->Lerp."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::Lerp",
+                    "lines": "10365-10390",
+                    "claim": "Lerp behavior depends on compiled X/Y/A chunks and constants before emitting."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionDesaturation",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "Input,Fraction",
+                        "explanation": "Input is ForceCast to MCT_Float3, Grey is Dot(Color,luminance). If Fraction is connected, returns Lerp(Color,Grey,Fraction); otherwise returns Grey. Therefore connected Fraction changes output from promoted lerp result to scalar grey."
+                    }
+                }
+            ],
+            "pseudoHlsl": "lerp(float3({Input}), dot(float3({Input}), LuminanceFactors), {Fraction}) or grey",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionDesaturation::Compile",
+                    "lines": "7939-7951",
+                    "claim": "Desaturation force-casts input to float3, computes grey dot, and conditionally returns lerp or grey."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::ForceCast",
+                    "lines": "4777-4841",
+                    "claim": "ForceCast controls float replication/truncation and nonnumeric cast errors."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionTextureSample",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "TextureObject,Coordinates",
+                        "explanation": "Compile chooses texture source, sampler type and coordinate/mip logic, then samples. Output type depends on sampler/texture path and OutputIndex, so text-only source rule is context-dependent rather than a single normalized type."
+                    }
+                }
+            ],
+            "pseudoHlsl": "TextureSample(...) / channel outputs",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionTextureSample::Compile",
+                    "lines": "2770-2841",
+                    "claim": "Texture sample compile selects input texture object or node texture and builds coordinates/mip inputs before sampling."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionSceneTexture",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "Coordinates",
+                        "explanation": "OutputIndex 0/3 returns SceneTextureLookup for SceneTextureId; OutputIndex 1/2 returns view size or inverse size. SceneTextureId and output index determine the type."
+                    }
+                }
+            ],
+            "pseudoHlsl": "SceneTextureLookup(...) or GetSceneTextureViewSize(...) ",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionSceneTexture::Compile",
+                    "lines": "10649-10674",
+                    "claim": "Compile branches by OutputIndex to scene texture color/input versus size outputs."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::SceneTextureLookup",
+                    "lines": "8158-8173",
+                    "claim": "SceneTextureLookup has shader-frequency and shading-model context constraints."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionWorldPosition",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": null,
+                        "explanation": "Compile delegates to Compiler->WorldPosition(WorldPositionShaderOffset). Translator selects origin/no-offset behavior based on shader frequency, previous-frame compilation and WPT mode; normalized type is vector-like but exact internal LWC/non-LWC is context-dependent."
+                    }
+                }
+            ],
+            "pseudoHlsl": "WorldPosition({WorldPositionShaderOffset})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionWorldPosition::Compile",
+                    "lines": "12263-12267",
+                    "claim": "The expression delegates to Compiler->WorldPosition."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::WorldPosition",
+                    "lines": "6218-6238",
+                    "claim": "WorldPosition result setup depends on shader frequency, previous frame and offset mode."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionScreenPosition",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float2",
+                        "input": null,
+                        "explanation": "OutputIndex 0 returns Compiler->GetViewportUV, whose translator emits MCT_Float2."
+                    }
+                },
+                {
+                    "index": 1,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float2",
+                        "input": null,
+                        "explanation": "OutputIndex 1 returns Compiler->GetPixelPosition, vector pixel coordinates. Shader frequency restrictions may produce compile errors."
+                    }
+                }
+            ],
+            "pseudoHlsl": "GetViewportUV(Parameters) / GetPixelPosition(Parameters)",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionScreenPosition::Compile",
+                    "lines": "10379-10386",
+                    "claim": "OutputIndex 1 maps to GetPixelPosition; other outputs map to GetViewportUV."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::GetViewportUV",
+                    "lines": "5922-5938",
+                    "claim": "GetViewportUV emits MCT_Float2."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::GetPixelPosition",
+                    "lines": "5941-5950",
+                    "claim": "GetPixelPosition has the same shader-frequency restrictions and emits pixel-coordinate code."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionTime",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": "float",
+                        "input": null,
+                        "explanation": "Compile chooses Compiler->RealTime or Compiler->GameTime. Both translator paths emit scalar MCT_Float, except period zero returns scalar Constant(0.0f)."
+                    }
+                }
+            ],
+            "pseudoHlsl": "View.GameTime/View.RealTime/fmod(...)",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionTime::Compile",
+                    "lines": "5547-5550",
+                    "claim": "The expression delegates to RealTime or GameTime based on bIgnorePause."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::GameTime",
+                    "lines": "5274-5295",
+                    "claim": "GameTime emits MCT_Float or scalar constant."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::RealTime",
+                    "lines": "5297-5305",
+                    "claim": "RealTime emits scalar real-time code."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionFunctionInput",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "caller input or preview",
+                        "explanation": "Declared FunctionInput type maps to an EMaterialValueType and compiled caller/preview expression is ValidCast to that type. Missing caller input may use preview/default or produce an error. GetOutputValueType returns GetInputValueType(0)."
+                    }
+                }
+            ],
+            "pseudoHlsl": "callerInput cast to declared FunctionInput type",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionFunctionInput::Compile",
+                    "lines": "16545-16620",
+                    "claim": "Function input maps declared enum to material value type, compiles caller/preview input, and casts to declared type."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionFunctionInput::GetOutputValueType",
+                    "lines": "16885-16888",
+                    "claim": "GetOutputValueType returns GetInputValueType(0)."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionFunctionOutput",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "A",
+                        "explanation": "No independent fixed output type is declared. GetOutputValueType returns GetRealInputValueType(A) when known, otherwise superclass output metadata; Compile returns A.Compile(Compiler)."
+                    }
+                }
+            ],
+            "pseudoHlsl": "{A}",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionFunctionOutput::GetInputValueType",
+                    "lines": "16977-16981",
+                    "claim": "Function outputs accept float/material-attributes/Substrate domains, not a declared concrete result type."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionFunctionOutput::GetOutputValueType",
+                    "lines": "16983-16993",
+                    "claim": "Output type is derived from connected input A if possible."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionFunctionOutput::Compile",
+                    "lines": "16995-17001",
+                    "claim": "Compilation returns A.Compile(Compiler), proving graph-derived output."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionMaterialFunctionCall",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "context-dependent",
+                        "type": null,
+                        "input": "callee output",
+                        "explanation": "GetOutputValueType delegates to the referenced function output expression. Compile links caller inputs into the callee, pushes function compile state, and compiles the requested function output. Concrete type cannot be known from source without the callee graph and caller context."
+                    }
+                }
+            ],
+            "pseudoHlsl": "MaterialFunction({inputs}).{output}",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionMaterialFunctionCall::Compile",
+                    "lines": "15774-15823",
+                    "claim": "Function call compiles by linking caller inputs, pushing function state and compiling the requested function output."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionMaterialFunctionCall::GetOutputValueType",
+                    "lines": "16357-16364",
+                    "claim": "Output type delegates to FunctionOutputs[OutputIndex].ExpressionOutput->GetOutputValueType(0)."
+                }
+            ]
+        },
+        {
+            "class": "MaterialExpressionCustom",
+            "outputs": [
+                {
+                    "index": 0,
+                    "typeRule": {
+                        "kind": "fixed",
+                        "type": null,
+                        "input": "OutputType",
+                        "explanation": "Output type is explicitly selected in Custom.OutputType: Float1->float, Float2->float2, Float3->float3, Float4->float4, MaterialAttributes->material-attributes; invalid/additional unknown entries are unknown. HLSL body itself is opaque to source-only rule extraction."
+                    }
+                }
+            ],
+            "pseudoHlsl": "CustomHLSL({Inputs})",
+            "evidence": [
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionCustom::Compile",
+                    "lines": "12757-12808",
+                    "claim": "Compile validates named inputs and delegates output emission to Compiler->CustomExpression."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/MaterialExpressions.cpp",
+                    "symbol": "UMaterialExpressionCustom::GetOutputValueType",
+                    "lines": "12895-12921",
+                    "claim": "Custom output enum maps to material value types or unknown."
+                },
+                {
+                    "file": "Engine/Source/Runtime/Engine/Private/Materials/HLSLMaterialTranslator.cpp",
+                    "symbol": "FHLSLMaterialTranslator::CustomExpression",
+                    "lines": "14086-14120",
+                    "claim": "Translator starts by switching on Custom->OutputType to choose OutputType."
+                }
+            ]
+        }
+    ],
+    "contextDependentClasses": [
+        "MaterialExpressionCosine",
+        "MaterialExpressionSine",
+        "MaterialExpressionLinearInterpolate",
+        "MaterialExpressionDesaturation",
+        "MaterialExpressionTextureSample",
+        "MaterialExpressionSceneTexture",
+        "MaterialExpressionWorldPosition",
+        "MaterialExpressionFunctionInput",
+        "MaterialExpressionFunctionOutput",
+        "MaterialExpressionMaterialFunctionCall"
+    ],
+    "materialFunctionsWhoseConcreteTypesCannotBeReadFromTextSourceOnly": [
+        "/Engine/Functions/Engine_MaterialFunctions02/Math/Pi.Pi",
+        "/Engine/Functions/Engine_MaterialFunctions02/Utility/MakeFloat3.MakeFloat3",
+        "/Engine/Functions/Engine_MaterialFunctions02/Texturing/ScreenAlignedPixelToPixelUVs.ScreenAlignedPixelToPixelUVs",
+        "All other Engine Content Material Function assets under /Engine because their graphs are stored in .uasset packages, and this task forbids parsing or loading those assets. Source text proves only FunctionInput/FunctionOutput/MaterialFunctionCall mechanisms."
+    ]
+}

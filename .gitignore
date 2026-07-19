@@ -1,0 +1,9 @@
+node_modules/
+dist/
+samples/
+*.tsbuildinfo
+ui-desktop.png
+ui-mobile.png
+.vite-*.log
+.vite.stdout.log
+.vite.stderr.log

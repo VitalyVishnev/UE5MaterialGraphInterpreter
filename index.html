@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Turn Unreal Engine Material clipboard text into readable pseudo-HLSL.">
+    <title>UE Material Graph Interpreter</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>UE Material Graph Interpreter</h1>
+          <p>Paste Unreal Engine Material or Material Function nodes to inspect their connected math as pseudo-HLSL.</p>
+        </div>
+        <span class="version">V1</span>
+      </header>
+
+      <section class="workspace" aria-label="Graph analysis workspace">
+        <div class="panel input-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Clipboard</h2>
+              <span id="input-meta" class="meta">Waiting for Unreal clipboard text</span>
+            </div>
+            <button id="paste-clipboard" type="button">Paste clipboard</button>
+          </div>
+          <label for="clipboard" class="sr-only">Unreal Engine clipboard text</label>
+          <textarea id="clipboard" spellcheck="false" placeholder="Begin Object Class=/Script/UnrealEd.MaterialGraphNode ..."></textarea>
+        </div>
+
+        <div class="panel output-panel">
+          <div class="panel-heading output-controls">
+            <label for="output-select">
+              <span>Output</span>
+              <select id="output-select" disabled>
+                <option>No output detected</option>
+              </select>
+            </label>
+            <button id="copy-code" type="button" disabled>Copy code</button>
+          </div>
+          <details class="format-settings">
+            <summary>Formatting</summary>
+            <div class="settings-grid">
+              <label>
+                <span>All outputs</span>
+                <select id="bundle-format" disabled title="Choose how All outputs is represented: a compact readable bundle or a stricter HLSL-like struct">
+                  <option value="readable" selected>Readable bundle</option>
+                  <option value="strict">Strict HLSL-like struct</option>
+                </select>
+              </label>
+              <label class="check-setting" title="Insert section headings from large Unreal graph comment boxes">
+                <input id="show-sections" type="checkbox" checked>
+                <span>Graph comment sections</span>
+              </label>
+              <label class="check-setting" title="Show the complete stored HLSL body of each connected Custom node instead of an opaque function call">
+                <input id="expand-custom-nodes" type="checkbox">
+                <span>Expand Custom nodes</span>
+              </label>
+              <label class="check-setting" title="Wrap standalone calls with three or more arguments and long nested formulas across multiple lines">
+                <input id="wrap-calls" type="checkbox" checked>
+                <span>Wrap complex calls and formulas</span>
+              </label>
+              <label class="check-setting" title="Add blank lines around long formulas and expanded Custom HLSL blocks">
+                <input id="space-operations" type="checkbox" checked>
+                <span>Space out complex operations</span>
+              </label>
+              <label class="check-setting" title="Fold scalar constants and remove neutral +0, -0, *1, and /1 operations">
+                <input id="simplify-algebra" type="checkbox">
+                <span>Simplify algebra</span>
+              </label>
+            </div>
+          </details>
+          <div class="type-legend" aria-label="Type confidence legend">
+            <span title="Type is declared or proven by the graph"><code class="token-type">float</code> confirmed</span>
+            <span title="Type is inferred from surrounding graph constraints"><code class="token-inferred">?float</code> inferred</span>
+            <span title="The value has at least this many numeric channels"><code class="token-inferred">?float2+</code> at least float2</span>
+            <span title="The graph does not provide enough evidence"><code class="token-unresolved">?type</code> unresolved</span>
+          </div>
+          <pre id="code" aria-label="Generated pseudo-HLSL"><code>// Generated pseudo-HLSL will appear here.</code></pre>
+        </div>
+        <div class="panel diagnostics-panel">
+          <div class="panel-heading">
+            <h2>Diagnostics</h2>
+            <span id="diagnostic-count" class="meta">0</span>
+          </div>
+          <div class="diagnostics-scroll">
+            <details class="diagnostic-group" open>
+              <summary class="subsection-heading">
+                <h3>Static switches</h3>
+                <span id="switch-count" class="meta">0</span>
+              </summary>
+              <div id="static-switches" class="static-switches">
+                <p class="empty">Relevant Static Switches will appear here.</p>
+              </div>
+            </details>
+            <details class="diagnostic-group" open>
+              <summary class="subsection-heading">
+                <h3>Type overrides</h3>
+                <span id="function-count" class="meta">0</span>
+              </summary>
+              <div id="type-overrides" class="external-functions">
+                <p class="empty">External function outputs and unresolved Custom inputs will appear here.</p>
+              </div>
+            </details>
+            <ol id="diagnostics" class="message-list">
+              <li class="empty">No analysis yet.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
