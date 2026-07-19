@@ -1,5 +1,9 @@
 # Documentation Log
 
+## 2026-07-19 - Product README drafted
+
+Added the English V1 landing README with a live demo, problem statement, workflow, real pseudo-HLSL example, supported feature families, type-certainty notation, variable-naming hierarchy, privacy contract, limitations, and reserved paired-screenshot placement.
+
 ## 2026-07-19 - V1 version and public test mode established
 
 Marked the application and maintained wiki as V1/1.0.0. Sample-dependent tests now run locally when the private corpus exists and are explicitly skipped in clean public checkouts, preserving both green CI and the full local regression suite.
@@ -205,3 +209,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Preserved all containing Comment Boxes in Graph IR instead of retaining only the smallest rectangle.
 - Classified comments after declaration planning: multiple statements use section separators, one statement uses `//`, and a valid single-node comment can name its result at the lowest authored priority.
 - Added regressions for nested region order, naming priority, collapsed multi-node regions, and disabled comment formatting.
+
+## 2026-07-19 - README type-certainty legend
+
+- Added local SVG badges that mirror the interpreter's confirmed, inferred, minimum-width, and unresolved type colors.
+- Kept textual meanings and accessible image descriptions so certainty is not communicated by color alone.

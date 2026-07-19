@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="82" height="24" viewBox="0 0 82 24" role="img" aria-labelledby="title">
+  <title id="title">Confirmed type: float</title>
+  <rect width="82" height="24" rx="5" fill="#101010"/>
+  <text x="41" y="16" fill="#55A9E8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="13" text-anchor="middle">float</text>
+</svg>
