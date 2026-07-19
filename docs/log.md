@@ -230,3 +230,4 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 
 - Added an indexable title, description, canonical URL, and `WebApplication` JSON-LD to the deployed document.
 - Added public `robots.txt` and sitemap files, a compact explanatory site footer, and a GitHub repository link beside the analysis status.
+- Added the owner-supplied Google Search Console verification tag.
