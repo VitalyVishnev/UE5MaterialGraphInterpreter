@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vitalyvishnev.github.io/UE5MaterialGraphInterpreter/sitemap.xml

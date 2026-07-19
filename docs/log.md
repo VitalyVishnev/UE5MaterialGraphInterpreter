@@ -225,3 +225,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Combined the supplied Unreal Material Graph and interpreter screenshots into one non-generative README asset.
 - Preserved both source images proportionally and placed inferred-type-colored label blocks without covering the interpreted code.
 - Added the approved composite to the README's `From graph math to readable code` section.
+
+## 2026-07-19 - Static site discovery metadata
+
+- Added an indexable title, description, canonical URL, and `WebApplication` JSON-LD to the deployed document.
+- Added public `robots.txt` and sitemap files, a compact explanatory site footer, and a GitHub repository link beside the analysis status.

@@ -256,10 +256,36 @@ pre {
 .message.warning strong { color: var(--warning); }
 .empty { padding: 13px; font-size: .86rem; }
 
-#status { min-height: 20px; margin-top: 12px; font-size: .86rem; color: var(--muted); }
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 20px;
+  margin-top: 12px;
+}
+#status { min-height: 20px; font-size: .86rem; color: var(--muted); }
 #status.error { color: var(--error); }
 #status.warning { color: var(--warning); }
 #status.success { color: var(--success); }
+.github-link {
+  color: var(--muted);
+  font-size: .82rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.github-link:hover { color: var(--syntax-blue); text-decoration: underline; }
+.site-footer {
+  display: grid;
+  gap: .375rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.5;
+}
+.site-footer h2 { color: var(--foreground); font-size: .88rem; }
 
 .sr-only {
   position: absolute;
@@ -295,5 +321,6 @@ pre {
   .output-controls { align-items: stretch; flex-direction: column; }
   .version { align-self: flex-start; }
   .output-controls label { align-items: stretch; flex-direction: column; }
+  .status-row { align-items: flex-start; flex-direction: column; }
   select { max-width: none; width: 100%; }
 }
