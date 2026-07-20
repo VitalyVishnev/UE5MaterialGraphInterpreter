@@ -110,6 +110,11 @@ function populateTypeSelect(select: HTMLSelectElement, output: TypeOverrideValue
   select.value = output.status === "overridden" && output.type ? output.type : "";
 }
 
+function setTypeOverride(id: string, type: MaterialType | ""): void {
+  if (type) typeOverrides.set(id, type);
+  else typeOverrides.delete(id);
+}
+
 function closeCodePopover(): void {
   codePopover.hidden = true;
   codePopoverState = undefined;
@@ -129,6 +134,13 @@ function positionCodePopover(target: HTMLElement): void {
   codePopover.style.top = `${top}px`;
 }
 
+function showCodePopover(target: HTMLElement, focus: () => void): void {
+  codePopoverError.hidden = true;
+  codePopover.hidden = false;
+  positionCodePopover(target);
+  focus();
+}
+
 function openRenamePopover(symbol: EditableSymbol, target: HTMLElement): void {
   codePopoverState = { kind: "rename", symbol };
   codePopoverLabel.textContent = `Rename ${symbol.name}`;
@@ -137,11 +149,10 @@ function openRenamePopover(symbol: EditableSymbol, target: HTMLElement): void {
   codePopoverInput.value = nameOverrides.get(symbol.id) ?? symbol.name;
   codePopoverType.hidden = true;
   codePopoverReset.hidden = !nameOverrides.has(symbol.id);
-  codePopoverError.hidden = true;
-  codePopover.hidden = false;
-  positionCodePopover(target);
-  codePopoverInput.focus();
-  codePopoverInput.select();
+  showCodePopover(target, () => {
+    codePopoverInput.focus();
+    codePopoverInput.select();
+  });
 }
 
 function openTypePopover(symbol: EditableSymbol, output: TypeOverrideValue, target: HTMLElement): void {
@@ -152,10 +163,25 @@ function openTypePopover(symbol: EditableSymbol, output: TypeOverrideValue, targ
   codePopoverType.hidden = false;
   populateTypeSelect(codePopoverType, output);
   codePopoverReset.hidden = !typeOverrides.has(output.id);
-  codePopoverError.hidden = true;
-  codePopover.hidden = false;
-  positionCodePopover(target);
-  codePopoverType.focus();
+  showCodePopover(target, () => codePopoverType.focus());
+}
+
+function makeInteractiveCodeToken(
+  span: HTMLSpanElement,
+  className: string,
+  title: string,
+  open: () => void,
+): void {
+  span.classList.add(className);
+  span.tabIndex = 0;
+  span.title = title;
+  span.addEventListener("click", open);
+  span.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      open();
+    }
+  });
 }
 
 function renderCode(result: AnalysisResult): void {
@@ -194,31 +220,13 @@ function renderCode(result: AnalysisResult): void {
                     ? "token-string"
                     : "token-function";
       if (typeOverride && symbol === undefined) {
-        span.classList.add("code-type-override");
         span.dataset.typeOverrideId = typeOverride.id;
-        span.tabIndex = 0;
-        span.title = "Choose this output type";
         const open = () => openTypePopover(symbols.get(followingIdentifier!)!, typeOverride, span);
-        span.addEventListener("click", open);
-        span.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            open();
-          }
-        });
+        makeInteractiveCodeToken(span, "code-type-override", "Choose this output type", open);
       } else if (symbol) {
-        span.classList.add("code-symbol");
         span.dataset.symbolId = symbol.id;
-        span.tabIndex = 0;
-        span.title = `Rename ${symbol.name}`;
         const open = () => openRenamePopover(symbol, span);
-        span.addEventListener("click", open);
-        span.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            open();
-          }
-        });
+        makeInteractiveCodeToken(span, "code-symbol", `Rename ${symbol.name}`, open);
       }
       fragment.append(span);
       cursor = index + token.length;
@@ -322,8 +330,7 @@ function renderTypeOverrides(result: AnalysisResult): void {
 
       populateTypeSelect(select, output);
       select.addEventListener("change", () => {
-        if (select.value) typeOverrides.set(output.id, select.value as MaterialType);
-        else typeOverrides.delete(output.id);
+        setTypeOverride(output.id, select.value as MaterialType | "");
         if (!acceptedSource) return;
         reanalyzeAccepted();
       });
@@ -469,8 +476,7 @@ function applyCodePopover(): void {
   if (!state) return;
 
   if (state.kind === "type") {
-    if (codePopoverType.value) typeOverrides.set(state.output.id, codePopoverType.value as MaterialType);
-    else typeOverrides.delete(state.output.id);
+    setTypeOverride(state.output.id, codePopoverType.value as MaterialType | "");
     reanalyzeAccepted();
     return;
   }
@@ -495,7 +501,7 @@ function applyCodePopover(): void {
 codePopoverApply.addEventListener("click", applyCodePopover);
 codePopoverReset.addEventListener("click", () => {
   if (!codePopoverState) return;
-  if (codePopoverState.kind === "type") typeOverrides.delete(codePopoverState.output.id);
+  if (codePopoverState.kind === "type") setTypeOverride(codePopoverState.output.id, "");
   else {
     nameOverrides.delete(codePopoverState.symbol.id);
     persistNameOverrides();

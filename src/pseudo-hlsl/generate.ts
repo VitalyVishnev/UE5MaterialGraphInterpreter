@@ -462,8 +462,9 @@ function generatePseudoHlslForOutputs(
     return functionOutputId(node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction", index);
   };
   const registerSymbol = (node: GraphNode, pin: GraphPin, name: string): void => {
-    editableSymbols.set(symbolId(node, pin), {
-      id: symbolId(node, pin),
+    const id = symbolId(node, pin);
+    editableSymbols.set(id, {
+      id,
       name,
       typeOverrideId: externalTypeOverrideId(node, pin),
     });
