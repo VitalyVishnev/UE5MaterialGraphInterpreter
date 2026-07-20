@@ -24,6 +24,7 @@ const expandCustomNodes = element<HTMLInputElement>("expand-custom-nodes");
 const wrapCalls = element<HTMLInputElement>("wrap-calls");
 const spaceOperations = element<HTMLInputElement>("space-operations");
 const simplifyAlgebra = element<HTMLInputElement>("simplify-algebra");
+const syntaxHighlighting = element<HTMLInputElement>("syntax-highlighting");
 const code = element<HTMLElement>("code").querySelector("code")!;
 const diagnostics = element<HTMLOListElement>("diagnostics");
 const staticSwitches = element<HTMLDivElement>("static-switches");
@@ -41,8 +42,8 @@ const codePopoverError = element<HTMLParagraphElement>("code-popover-error");
 const codePopoverApply = element<HTMLButtonElement>("code-popover-apply");
 const codePopoverReset = element<HTMLButtonElement>("code-popover-reset");
 const codeTokenPattern = /(\/\/.*|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\?(?:float[2-4]?\+?|bool|type)(?!\w)|\b(?:const|return|static)\b|\b(?:float[2-4]?|bool|Texture2D(?:Array)?|TextureCube(?:Array)?|Texture3D|TextureExternal|SparseVolumeTexture|MaterialAttributes|Substrate|ShadingModel)\b|\b\d+(?:\.\d+)?f?\b|\b[A-Za-z_]\w*\b)/g;
-const typeTokenPattern = /^(?:float[2-4]?|bool|Texture2D(?:Array)?|TextureCube(?:Array)?|Texture3D|TextureExternal|SparseVolumeTexture|MaterialAttributes|Substrate|ShadingModel)$/;
-const keywordTokenPattern = /^(?:const|return|static)$/;
+const typeTokenPattern = /^(?:float[2-4]?|half[2-4]?|int[2-4]?|uint[2-4]?|bool|void|Texture2D(?:Array)?|TextureCube(?:Array)?|Texture3D|TextureExternal|SparseVolumeTexture|MaterialAttributes|Substrate|ShadingModel)$/;
+const keywordTokenPattern = /^(?:const|return|static|true|false)$/;
 const nameOverrideStorageKey = "ue5-material-graph-interpreter:name-overrides";
 const reservedVariableNames = new Set(["const", "return", "static", "bool", "float", "float2", "float3", "float4"]);
 
@@ -199,7 +200,8 @@ function renderCode(result: AnalysisResult): void {
       fragment.append(document.createTextNode(line.slice(cursor, index)));
       const span = document.createElement("span");
       span.textContent = token;
-      const followingIdentifier = line.slice(index + token.length).match(/^\s+([A-Za-z_]\w*)/)?.[1];
+      const remainingLine = line.slice(index + token.length);
+      const followingIdentifier = remainingLine.match(/^\s+([A-Za-z_]\w*)/)?.[1];
       const symbol = symbols.get(token);
       const typeOverride = token.startsWith("?") && followingIdentifier
         ? types.get(symbols.get(followingIdentifier)?.typeOverrideId ?? "")
@@ -215,10 +217,12 @@ function renderCode(result: AnalysisResult): void {
               : keywordTokenPattern.test(token)
                 ? "token-keyword"
                 : /^\d/.test(token)
-                  ? "token-number"
-                  : token.startsWith("\"") || token.startsWith("'")
-                    ? "token-string"
-                    : "token-function";
+                    ? "token-number"
+                    : token.startsWith("\"") || token.startsWith("'")
+                      ? "token-string"
+                    : /^\s*\(/.test(remainingLine)
+                      ? "token-function"
+                      : "token-identifier";
       if (typeOverride && symbol === undefined) {
         span.dataset.typeOverrideId = typeOverride.id;
         const open = () => openTypePopover(symbols.get(followingIdentifier!)!, typeOverride, span);
@@ -550,6 +554,10 @@ spaceOperations.addEventListener("change", () => {
 simplifyAlgebra.addEventListener("change", () => {
   formatting.simplifyAlgebra = simplifyAlgebra.checked;
   reanalyzeAccepted();
+});
+
+syntaxHighlighting.addEventListener("change", () => {
+  code.classList.toggle("syntax-disabled", !syntaxHighlighting.checked);
 });
 
 copyButton.addEventListener("click", async () => {

@@ -173,10 +173,12 @@ pre {
 .token-type,
 .token-keyword,
 .token-function { color: var(--syntax-blue); }
+.token-identifier,
 .token-number,
 .token-string { color: var(--syntax-yellow); }
 .token-inferred { color: var(--syntax-inferred); }
 .token-unresolved { color: var(--syntax-unresolved); }
+#code .syntax-disabled span { color: var(--foreground); }
 .code-symbol,
 .code-type-override {
   border-radius: 3px;

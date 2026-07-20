@@ -249,3 +249,9 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Added confirmed `float` semantics for `LandscapeLayerSample` and terminal output handling for each connected `LandscapeGrassOutput` input.
 - Added a self-contained regression that renders a Landscape Layer Sample into a Grass Output without an unsupported-node fallback.
 - Added the default `All outputs` union view for several inputs of one terminal expression, including Landscape Grass Output; terminal bundles render as `GraphOutputs` rather than a misleading Function signature.
+
+## 2026-07-20 - Unreal-style code-token contrast
+
+- Restricted blue syntax coloring to types, keywords, and invoked functions.
+- Rendered identifiers, fields, strings, and numeric literals in the warmer yellow code color so dense pseudo-HLSL remains scannable.
+- Added a Formatting checkbox that disables all syntax colors for a neutral white-code view without reanalyzing the graph.
