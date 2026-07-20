@@ -1108,6 +1108,9 @@ function generatePseudoHlslForOutputs(
     return { fieldName, name, value };
   });
 
+  const bundleType = outputs.every((output) =>
+    graph.nodes.get(output.ownerNodeId)?.kind === "function-output",
+  ) ? "FunctionOutputs" : "GraphOutputs";
   const bundleLines = outputs.length === 1
     ? graph.nodes.get(outputs[0].ownerNodeId)?.kind === "function-output"
       ? ["", `return ${renderedOutputs[0].name};`]
@@ -1115,18 +1118,18 @@ function generatePseudoHlslForOutputs(
     : options.bundleFormat === "strict"
       ? [
           "",
-          "struct FunctionOutputs",
+          `struct ${bundleType}`,
           "{",
           ...renderedOutputs.map(({ fieldName, value }) => `    ${renderedType(value)} ${fieldName};`),
           "};",
           "",
-          "FunctionOutputs result;",
+          `${bundleType} result;`,
           ...renderedOutputs.map(({ fieldName, name }) => `result.${fieldName} = ${name};`),
           "return result;",
         ]
       : [
           "",
-          "return FunctionOutputs",
+          `return ${bundleType}`,
           "{",
           ...renderedOutputs.map(
             ({ fieldName, name }, index) => `    ${fieldName}: ${name}${index < renderedOutputs.length - 1 ? "," : ""}`,

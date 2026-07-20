@@ -1,6 +1,7 @@
 import { parseClipboard } from "./clipboard/parser";
 import type { Diagnostic } from "./clipboard/raw-types";
 import { materialTypeOptions, type MaterialType } from "./graph/material-types";
+import { isTerminalExpression } from "./graph/expression-semantics";
 import { resolveGraph } from "./graph/resolve";
 import type { StaticSwitchControl } from "./graph/slice";
 import type { GraphOutput } from "./graph/types";
@@ -63,8 +64,12 @@ export function analyzeClipboard(
     };
   }
 
-  const hasAllOutputs = graph.outputs.length > 1 && graph.outputs.every(
-    (output) => graph.nodes.get(output.ownerNodeId)?.kind === "function-output",
+  const sharedOwner = graph.nodes.get(graph.outputs[0].ownerNodeId);
+  const hasAllOutputs = graph.outputs.length > 1 && (
+    graph.outputs.every((output) => graph.nodes.get(output.ownerNodeId)?.kind === "function-output") ||
+    Boolean(sharedOwner && isTerminalExpression(sharedOwner) && graph.outputs.every(
+      (output) => output.ownerNodeId === sharedOwner.id,
+    ))
   );
   const selectedOutputId = requestedOutputId === ALL_OUTPUTS_ID && hasAllOutputs
     ? ALL_OUTPUTS_ID

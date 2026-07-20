@@ -78,7 +78,7 @@ function parsePin(raw: string): GraphPin | undefined {
 
 function expressionDeclaration(object: RawObject): RawObject | undefined {
   return object.children.find((child) =>
-    child.className?.startsWith("/Script/Engine.MaterialExpression"),
+    child.className?.includes(".MaterialExpression"),
   );
 }
 

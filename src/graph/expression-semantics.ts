@@ -273,6 +273,8 @@ export const advancedExpressionSemantics = {
   MaterialExpressionFeatureLevelSwitch: advanced("FeatureLevelSwitch", undefined, undefined, { branches: true }),
   MaterialExpressionGetMaterialAttributes: advanced("GetMaterialAttributes"),
   MaterialExpressionLayerStack: advanced("LayerStack", "MaterialAttributes"),
+  MaterialExpressionLandscapeGrassOutput: advanced("LandscapeGrassOutput", undefined, undefined, { terminal: true }),
+  MaterialExpressionLandscapeLayerSample: advanced("LandscapeLayerSample", "float"),
   MaterialExpressionLightVector: advanced("LightVector", "float3"),
   MaterialExpressionMainDirectionalLight: advanced("MainDirectionalLight", undefined, { Illuminance: "float3", Direction: "float3" }),
   MaterialExpressionMakeMaterialAttributes: advanced("MakeMaterialAttributes", "MaterialAttributes"),

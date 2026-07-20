@@ -49,6 +49,53 @@ describe("resolveGraph", () => {
     );
   });
 
+  it("discovers Landscape Grass Output pins from the Landscape module", () => {
+    const graph = resolveGraph(parseClipboard(`
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="GrassOutput"
+  Begin Object Class=/Script/Landscape.MaterialExpressionLandscapeGrassOutput Name="GrassOutputExpression"
+  End Object
+  Begin Object Name="GrassOutputExpression"
+  End Object
+  CustomProperties Pin (PinId=11111111111111111111111111111111,PinName="Kill Layer",LinkedTo=(Max AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA))
+  CustomProperties Pin (PinId=22222222222222222222222222222222,PinName="Grass",LinkedTo=(Grass BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB))
+  CustomProperties Pin (PinId=33333333333333333333333333333333,PinName="GrassDry",LinkedTo=(GrassDry CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Grass"
+  Begin Object Class=/Script/Landscape.MaterialExpressionLandscapeLayerSample Name="GrassExpression"
+  End Object
+  Begin Object Name="GrassExpression"
+    ParameterName="Grass"
+  End Object
+  CustomProperties Pin (PinId=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="GrassDry"
+  Begin Object Class=/Script/Landscape.MaterialExpressionLandscapeLayerSample Name="GrassDryExpression"
+  End Object
+  Begin Object Name="GrassDryExpression"
+    ParameterName="GrassDry"
+  End Object
+  CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Max"
+  Begin Object Class=/Script/Engine.MaterialExpressionMax Name="MaxExpression"
+  End Object
+  Begin Object Name="MaxExpression"
+  End Object
+  CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD,PinName="A",LinkedTo=(Grass BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB))
+  CustomProperties Pin (PinId=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE,PinName="B",LinkedTo=(GrassDry CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC))
+  CustomProperties Pin (PinId=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,PinName="Output",Direction="EGPD_Output")
+End Object
+`));
+
+    expect(graph.outputs.map((output) => output.label)).toEqual([
+      "LandscapeGrassOutput.Kill Layer",
+      "LandscapeGrassOutput.Grass",
+      "LandscapeGrassOutput.GrassDry",
+    ]);
+    expect(graph.nodes.get("Grass")?.expressionClass).toBe("MaterialExpressionLandscapeLayerSample");
+    expect(graph.nodes.get("GrassOutput")?.expressionClass).toBe("MaterialExpressionLandscapeGrassOutput");
+  });
+
   sampleIt("does not expose the Function Output input-pin name as the result name", () => {
     const source = readFileSync(
       resolve("samples/MF_GerstnerWaves/MF_GerstnerWaves_full_clipboard.txt"),

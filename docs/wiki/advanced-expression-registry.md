@@ -20,6 +20,7 @@ The additional Substrate capture contains 15 classes and 19 outputs. Eleven clas
 | Texture samples | `ParticleSubUV`, `TextureSample`, `TextureSampleParameter2D`, `TextureSampleParameter2DArray`, `TextureSampleParameterCube`, `TextureSampleParameterCubeArray`, `TextureSampleParameterSubUV`, `TextureSampleParameterVolume` | `RGB=float3`, `R/G/B/A=float`, `RGBA=float4` |
 | Sparse volume | `SparseVolumeTextureObject`, `SparseVolumeTextureObjectParameter`, `SparseVolumeTextureSample`, `SparseVolumeTextureSampleParameter` | object type or two `float4` attribute outputs |
 | Runtime virtual texture | `RuntimeVirtualTextureSample`, `RuntimeVirtualTextureSampleParameter`, `RuntimeVirtualTextureCustomData`, `RuntimeVirtualTextureReplace`, `RuntimeVirtualTextureOutput`, `VirtualTextureFeatureSwitch` | named sampled channels; branch-preserved polymorphic output; connected output-node inputs become graph results |
+| Landscape | `LandscapeLayerSample`, `LandscapeGrassOutput` | layer weight is `float`; each connected Grass Output input becomes a named graph result |
 | Material Attributes | `MakeMaterialAttributes`, `BreakMaterialAttributes`, `GetMaterialAttributes`, `SetMaterialAttributes`, `BlendMaterialAttributes`, `LayerStack`, `ShadingModel` | `MaterialAttributes`, pin-specific attribute type, or `ShadingModel` |
 | Static/runtime branches | `StaticSwitch`, `StaticSwitchParameter`, `QualitySwitch`, `PathTracingRayTypeSwitch`, `RayTracingQualitySwitch`, `FeatureLevelSwitch`, `ShadingPathSwitch`, `PreviousFrameSwitch`, `ShadowReplace` | promoted type of the connected result branches; `?type` if copied without branch evidence |
 | Utility and collection data | `CollectionParameter`, `ConstantBiasScale`, `Distance`, `SphereMask`, `RotateAboutAxis` | context-derived collection value; same numeric type; `float`; `float`; `float3` |
@@ -79,7 +80,7 @@ The supplied `TextureSampleParameter2D` record contains enum defaults under inco
 
 ## Terminal expressions
 
-`RuntimeVirtualTextureOutput`, `VolumetricAdvancedMaterialOutput`, and `VolumetricCloudEmptySpaceSkippingOutput` are sinks. A connected input is exposed as a named graph output rather than rendered as a value-returning call. A disconnected sink has no result value to analyze.
+`RuntimeVirtualTextureOutput`, `LandscapeGrassOutput`, `VolumetricAdvancedMaterialOutput`, and `VolumetricCloudEmptySpaceSkippingOutput` are sinks. A connected input is exposed as a named graph output rather than rendered as a value-returning call. A disconnected sink has no result value to analyze. `LandscapeLayerSample` reads the named Landscape layer's weight and is therefore a confirmed `float`.
 
 ## Validation
 
@@ -102,6 +103,7 @@ The additional Substrate clipboard is repository-backed and replayed across all 
 - Epic: [Texture expressions](https://dev.epicgames.com/documentation/unreal-engine/texture-expressions?application_version=4.27) documents output channels and parameter/sample equivalence. The API pages above are authoritative for UE 5.8 class members.
 - Epic: [Material Attributes expressions](https://dev.epicgames.com/documentation/unreal-engine/material-attributes-expressions-in-unreal-engine) documents dynamic Get/Set attribute arrays and recommends Set over Make for compact graphs.
 - Epic: [Runtime Virtual Texturing](https://dev.epicgames.com/documentation/en-us/unreal-engine/runtime-virtual-texturing-in-unreal-engine) documents sample/parameter behavior and virtual-texture output workflows.
+- Epic: [Landscape Materials](https://dev.epicgames.com/documentation/en-us/unreal-engine/landscape-materials-in-unreal-engine) documents Landscape Layer Sample as a 0–1 layer-weight source; [UMaterialExpressionLandscapeGrassOutput](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/Landscape/UMaterialExpressionLandscapeGras-?lang=en-US) identifies Grass Output as a custom Material Expression output.
 - Epic: [Substrate overview](https://dev.epicgames.com/documentation/en-us/unreal-engine/overview-of-substrate-materials-in-unreal-engine) documents Substrate BSDF composition and Material Attributes conversion.
 - Epic: [Utility Material Expressions](https://dev.epicgames.com/documentation/en-us/unreal-engine/utility-material-expressions-in-unreal-engine) documents `Distance`, `SphereMask`, and the `float3` delta returned by `RotateAboutAxis`.
 - Epic: [Atmosphere Material Expressions](https://dev.epicgames.com/documentation/en-us/unreal-engine/atmosphere-material-expressions-in-unreal-engine) documents the supplied atmosphere sources and the deprecated fog expression.
@@ -112,6 +114,6 @@ The next useful batch should target classes whose signatures are still absent fr
 
 1. remaining texture families: cube/array object fixtures with real assets, font sampling, sprite sampling, antialiased masks, texture collections, and texture-object-from-collection;
 2. remaining platform/render-path switches: Nanite, distance-fields rendering, and required samplers;
-3. landscape, virtual-height-field, decal, scene-buffer, and specialized material-output expressions.
+3. virtual-height-field, decal, scene-buffer, and specialized material-output expressions.
 
 Do not assign contracts to these classes from names alone; collect clipboard pins or a primary API/source contract first.

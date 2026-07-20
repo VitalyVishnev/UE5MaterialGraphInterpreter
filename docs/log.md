@@ -242,3 +242,10 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Added direct declaration-name and unresolved external-output type editing in the generated code.
 - Keyed Name Overrides by Unreal `NodeGuid + Output PinId` and retained them only in the active browser session.
 - Kept the existing Type Override contract and avoided editing Unreal clipboard text.
+
+## 2026-07-20 - Landscape Grass Output support
+
+- Generalized expression-declaration discovery to preserve Material Expressions supplied by engine modules other than `/Script/Engine`.
+- Added confirmed `float` semantics for `LandscapeLayerSample` and terminal output handling for each connected `LandscapeGrassOutput` input.
+- Added a self-contained regression that renders a Landscape Layer Sample into a Grass Output without an unsupported-node fallback.
+- Added the default `All outputs` union view for several inputs of one terminal expression, including Landscape Grass Output; terminal bundles render as `GraphOutputs` rather than a misleading Function signature.

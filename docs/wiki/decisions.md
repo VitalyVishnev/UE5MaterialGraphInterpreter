@@ -316,7 +316,7 @@ Context:
 A Material Function can expose several outputs. Reviewing each output as a separate generated program duplicates shared mathematics and makes whole-function review unnecessarily fragmented.
 
 Decision:
-When every detected root is a real `MaterialExpressionFunctionOutput` and there is more than one, prepend `All outputs` and select it by default. Generate it from one union Graph Slice, emit every shared declaration once, and retain individual outputs as focused views. Do not offer this synthetic mode for unrelated terminal roots in partial graph selections.
+When every detected root is a real `MaterialExpressionFunctionOutput`, or every root belongs to the same terminal expression, and there is more than one, prepend `All outputs` and select it by default. Generate it from one union Graph Slice, emit every shared declaration once, and retain individual outputs as focused views. Do not offer this synthetic mode for unrelated terminal roots in partial graph selections.
 
 An external multi-output Material Function call is likewise emitted once. Readable mode declares only the outputs used by the selected Graph Slice and passes them as explicit pseudo-HLSL `out` results. A directly connected Named Reroute supplies the variable name; otherwise use the serialized output pin. Strict mode retains one structurally typed result bundle and field projections. Repeated calls allocate independent output symbols, so matching pin names from different call instances cannot alias or mix.
 
@@ -336,7 +336,7 @@ Reasoning:
 The union slice represents the actual shared dependency graph. Concatenating separately generated outputs would be longer, obscure reuse, and misrepresent evaluation cost. The readable default is easier to inspect, while the strict form helps readers who prefer conventional HLSL structure.
 
 Consequences:
-`MF_ResolveCoordinateFrame_Biplanar_Dither` opens as one five-output program, but `Tangent`, `Bitangent`, `UV`, `DXY`, and `Rotation (Turns)` remain individually selectable. Formatting settings affect presentation only, not graph semantics or inferred types.
+`MF_ResolveCoordinateFrame_Biplanar_Dither` opens as one five-output program, but `Tangent`, `Bitangent`, `UV`, `DXY`, and `Rotation (Turns)` remain individually selectable. A `LandscapeGrassOutput` with several connected layer inputs receives the same all-output view as a `GraphOutputs` record, while each named grass input remains individually selectable. Formatting settings affect presentation only, not graph semantics or inferred types.
 
 Related files:
 

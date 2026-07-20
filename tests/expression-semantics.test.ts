@@ -11,7 +11,7 @@ import {
   mathExpressionSemantics,
   proceduralNoiseExpression,
 } from "../src/graph/expression-semantics";
-import { analyzeClipboard } from "../src/analyze";
+import { ALL_OUTPUTS_ID, analyzeClipboard } from "../src/analyze";
 import type { GraphNode, GraphPin } from "../src/graph/types";
 
 const output = (name: string, id = name): GraphPin => ({
@@ -465,6 +465,39 @@ describe("built-in Material Expression semantics", () => {
     const result = analyzeClipboard(source);
     expect(result.outputs.map((item) => item.label)).toContain("RuntimeVirtualTextureOutput.BaseColor");
     expect(result.code).toContain("float3 RuntimeVirtualTextureOutput_BaseColor");
+  });
+
+  it("renders Landscape Layer Samples connected to a Landscape Grass Output", () => {
+    const source = [
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="GrassOutput"',
+      'Begin Object Class=/Script/Landscape.MaterialExpressionLandscapeGrassOutput Name="GrassOutput_0"',
+      "End Object", 'Begin Object Name="GrassOutput_0"', "End Object",
+      'CustomProperties Pin (PinId=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,PinName="Grass",LinkedTo=(Grass BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB))',
+      'CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC,PinName="GrassDry",LinkedTo=(GrassDry DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Grass"',
+      'Begin Object Class=/Script/Landscape.MaterialExpressionLandscapeLayerSample Name="Grass_0"',
+      "End Object", 'Begin Object Name="Grass_0"', 'ParameterName="Grass"', "End Object",
+      'CustomProperties Pin (PinId=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB,PinName="Output",Direction="EGPD_Output",LinkedTo=(GrassOutput AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="GrassDry"',
+      'Begin Object Class=/Script/Landscape.MaterialExpressionLandscapeLayerSample Name="GrassDry_0"',
+      "End Object", 'Begin Object Name="GrassDry_0"', 'ParameterName="GrassDry"', "End Object",
+      'CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD,PinName="Output",Direction="EGPD_Output",LinkedTo=(GrassOutput CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC))',
+      "End Object",
+    ].join("\n");
+
+    const result = analyzeClipboard(source);
+    expect(result.selectedOutputId).toBe(ALL_OUTPUTS_ID);
+    expect(result.outputs.map((item) => item.label)).toEqual([
+      "All outputs", "LandscapeGrassOutput.Grass", "LandscapeGrassOutput.GrassDry",
+    ]);
+    expect(result.code).toContain("float LandscapeGrassOutput_Grass = LandscapeLayerSample(Parameter: Grass);");
+    expect(result.code).toContain("float LandscapeGrassOutput_GrassDry = LandscapeLayerSample(Parameter: GrassDry);");
+    expect(result.code).toContain("return GraphOutputs");
+    expect(result.diagnostics).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "unsupported-node" }),
+    ]));
   });
 
   it("covers every supplied UE 5.8 Substrate expression and output", () => {
