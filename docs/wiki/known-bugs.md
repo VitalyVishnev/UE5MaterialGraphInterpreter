@@ -34,7 +34,7 @@ Likely cause:
 Unreal documents explicit FunctionInput types but no equivalent declared FunctionOutput type; the result is derived from the hidden internal function graph and compile context.
 
 Current workaround:
-The type-inference pass resolves call-site types when consumers, pin annotations, or surrounding operations provide evidence. The graph author can select the known output type in Diagnostics; the override applies to every call of the same function path for the current clipboard. Keep `?type` when several types remain possible.
+The type-inference pass resolves call-site types when consumers, pin annotations, surrounding operations, or a valid pasted definition provide evidence. The graph author can load the function definition, select its output type in Diagnostics, or click any displayed `?type`/inferred declaration in the code panel and supply the known type. Keep `?type` when several types remain possible and the author has not provided stronger evidence.
 
 Do not repeat:
 Do not assign return types from asset names alone.
@@ -43,6 +43,7 @@ Related files:
 
 - `src/pseudo-hlsl/generate.ts`
 - `src/graph/infer-types.ts`
+- `src/functions/library.ts`
 - `docs/raw/unreal-material-semantics-official-research.md`
 
 ## Limitation: The complete UE 5.8 Math clipboard is not stored in the repository
@@ -212,6 +213,70 @@ Related files:
 - `.github/workflows/deploy-pages.yml`
 - `tests/`
 - `samples/`
+
+## Limitation: Material Function definitions are tab-local evidence
+
+Status: Workaround
+
+Symptoms:
+Loaded Material Function definitions survive a refresh but disappear after the browser tab is closed. Very large definition libraries can exceed the browser's `sessionStorage` quota; the current in-memory definition still works, but the UI warns that refresh will lose it.
+
+Likely cause:
+V1 intentionally remains a private static application without a backend, file format, or access to Unreal assets. Browser storage quotas vary by browser and environment.
+
+Current workaround:
+Keep the Unreal functions available for repasting. When the quota warning appears, do not refresh until the current analysis is complete.
+
+Do not repeat:
+Do not silently fall back from failed storage writes or claim that a definition library is portable between tabs, browsers, or machines.
+
+Related files:
+
+- `src/main.ts`
+- `src/functions/library.ts`
+
+## Limitation: Codex browser can deny asynchronous clipboard reads
+
+Status: Workaround
+
+Symptoms:
+The embedded Codex browser can return `Read permission denied` from `navigator.clipboard.readText()` even after its Clipboard permission is reset to Ask or Allowed. Both the root `Paste clipboard` button and Material Function `Paste definition` button are affected.
+
+Likely cause:
+The refusal occurs in the embedded browser permission broker before clipboard text reaches application code. The local Vite response does not restrict Clipboard through CSP or `Permissions-Policy`, and the same refusal occurs on `127.0.0.1` and `localhost`.
+
+Current workaround:
+For a Material Function, focus the compact `Begin Object ...` field beside `Paste definition` and press `Ctrl+V`. The native paste event supplies text through `ClipboardEvent.clipboardData` without the asynchronous Clipboard Read permission.
+
+Do not repeat:
+Do not weaken definition validation or repeatedly request the same denied Clipboard API permission.
+
+Related files:
+
+- `src/main.ts`
+- `src/styles.css`
+
+## Limitation: Loaded definitions do not make pseudo-HLSL compiler-equivalent
+
+Status: Workaround
+
+Symptoms:
+Helpers and inline blocks can still contain opaque engine expressions, missing nested definitions, or compile-time branches whose final platform/material-instance value is unavailable.
+
+Likely cause:
+The clipboard describes editor graph structure, not Unreal's complete compilation environment, shader platform, generated includes, or material-instance overrides.
+
+Current workaround:
+Treat expanded output as a readable semantic model. Use Diagnostics and the Function Dependency Tree to identify opaque edges, and verify compiler-sensitive behavior in Unreal.
+
+Do not repeat:
+Do not present helper or inline output as code emitted by Unreal's material compiler.
+
+Related files:
+
+- `src/analyze.ts`
+- `src/functions/library.ts`
+- `src/pseudo-hlsl/generate.ts`
 
 Use this form:
 

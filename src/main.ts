@@ -1,12 +1,16 @@
 import "./styles.css";
 import {
-  analyzeClipboard,
+  createAnalysisWorkspace,
   defaultAnalysisFormatting,
   materialTypeOptions,
   type AnalysisFormatting,
   type AnalysisResult,
+  type AnalysisWorkspace,
+  type FunctionDependencyNode,
+  type FunctionExpansionMode,
   type MaterialType,
 } from "./analyze";
+import { loadStringMap, persistStringMap } from "./session-storage";
 
 const element = <T extends HTMLElement>(id: string): T => {
   const value = document.getElementById(id);
@@ -19,6 +23,7 @@ const pasteButton = element<HTMLButtonElement>("paste-clipboard");
 const outputSelect = element<HTMLSelectElement>("output-select");
 const copyButton = element<HTMLButtonElement>("copy-code");
 const bundleFormat = element<HTMLSelectElement>("bundle-format");
+const functionModeSelect = element<HTMLSelectElement>("function-mode");
 const showSections = element<HTMLInputElement>("show-sections");
 const expandCustomNodes = element<HTMLInputElement>("expand-custom-nodes");
 const wrapCalls = element<HTMLInputElement>("wrap-calls");
@@ -28,9 +33,13 @@ const syntaxHighlighting = element<HTMLInputElement>("syntax-highlighting");
 const code = element<HTMLElement>("code").querySelector("code")!;
 const diagnostics = element<HTMLOListElement>("diagnostics");
 const staticSwitches = element<HTMLDivElement>("static-switches");
+const materialFunctions = element<HTMLDivElement>("material-functions");
 const typeOverridesPanel = element<HTMLDivElement>("type-overrides");
+const clearFunctionLibrary = element<HTMLButtonElement>("clear-function-library");
+const generateLargeInline = element<HTMLButtonElement>("generate-large-inline");
 const diagnosticCount = element<HTMLSpanElement>("diagnostic-count");
 const functionCount = element<HTMLSpanElement>("function-count");
+const customCount = element<HTMLSpanElement>("custom-count");
 const switchCount = element<HTMLSpanElement>("switch-count");
 const inputMeta = element<HTMLSpanElement>("input-meta");
 const status = element<HTMLParagraphElement>("status");
@@ -45,6 +54,8 @@ const codeTokenPattern = /(\/\/.*|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\?(?:float[2-4
 const typeTokenPattern = /^(?:float[2-4]?|half[2-4]?|int[2-4]?|uint[2-4]?|bool|void|Texture2D(?:Array)?|TextureCube(?:Array)?|Texture3D|TextureExternal|SparseVolumeTexture|MaterialAttributes|Substrate|ShadingModel)$/;
 const keywordTokenPattern = /^(?:const|return|static|true|false)$/;
 const nameOverrideStorageKey = "ue5-material-graph-interpreter:name-overrides";
+const functionDefinitionStorageKey = "ue5-material-graph-interpreter:function-definitions";
+const functionModeStorageKey = "ue5-material-graph-interpreter:function-modes";
 const reservedVariableNames = new Set(["const", "return", "static", "bool", "float", "float2", "float3", "float4"]);
 
 type EditableSymbol = AnalysisResult["editableSymbols"][number];
@@ -55,31 +66,30 @@ type CodePopoverState =
 
 let acceptedSource = "";
 let acceptedResult: AnalysisResult | undefined;
+let acceptedWorkspace: AnalysisWorkspace | undefined;
 let copyFeedbackTimer: number | undefined;
 const typeOverrides = new Map<string, MaterialType>();
 const staticSwitchOverrides = new Map<string, boolean>();
 const formatting: AnalysisFormatting = { ...defaultAnalysisFormatting };
 const nameOverrides = loadNameOverrides();
+const functionDefinitions = loadStringMap(sessionStorage, functionDefinitionStorageKey);
+const functionModeOverrides = new Map(
+  [...loadStringMap(sessionStorage, functionModeStorageKey)].filter(
+    (entry): entry is [string, FunctionExpansionMode] =>
+      entry[1] === "types" || entry[1] === "helpers" || entry[1] === "inline",
+  ),
+);
+let functionMode: FunctionExpansionMode = "helpers";
+let allowLargeInline = false;
+let volatileFunctionLibrary = false;
 let codePopoverState: CodePopoverState | undefined;
 
 function loadNameOverrides(): Map<string, string> {
-  try {
-    const parsed: unknown = JSON.parse(sessionStorage.getItem(nameOverrideStorageKey) ?? "[]");
-    if (!Array.isArray(parsed)) return new Map();
-    return new Map(parsed.filter((entry): entry is [string, string] =>
-      Array.isArray(entry) && typeof entry[0] === "string" && typeof entry[1] === "string",
-    ));
-  } catch {
-    return new Map();
-  }
+  return loadStringMap(sessionStorage, nameOverrideStorageKey);
 }
 
 function persistNameOverrides(): void {
-  try {
-    sessionStorage.setItem(nameOverrideStorageKey, JSON.stringify([...nameOverrides]));
-  } catch {
-    // Session storage is optional; the active page still keeps the override.
-  }
+  persistStringMap(sessionStorage, nameOverrideStorageKey, nameOverrides);
 }
 
 function setStatus(message: string, kind = ""): void {
@@ -187,7 +197,23 @@ function makeInteractiveCodeToken(
 
 function renderCode(result: AnalysisResult): void {
   const fragment = document.createDocumentFragment();
-  const symbols = new Map(result.editableSymbols.map((symbol) => [symbol.name, symbol]));
+  const symbols = new Map<string, EditableSymbol[]>();
+  for (const symbol of result.editableSymbols) {
+    const matches = symbols.get(symbol.name) ?? [];
+    matches.push(symbol);
+    symbols.set(symbol.name, matches);
+  }
+  for (const matches of symbols.values()) {
+    matches.sort((left, right) =>
+      ((left.endLine ?? Number.POSITIVE_INFINITY) - (left.startLine ?? 0))
+      - ((right.endLine ?? Number.POSITIVE_INFINITY) - (right.startLine ?? 0)));
+  }
+  const symbolAt = (name: string | undefined, line: number): EditableSymbol | undefined =>
+    name
+      ? (symbols.get(name) ?? []).find((symbol) =>
+          line >= (symbol.startLine ?? 0)
+          && line <= (symbol.endLine ?? Number.POSITIVE_INFINITY))
+      : undefined;
   const types = new Map(result.typeOverrideGroups.flatMap((group) =>
     group.values.map((output) => [output.id, output] as const),
   ));
@@ -202,9 +228,11 @@ function renderCode(result: AnalysisResult): void {
       span.textContent = token;
       const remainingLine = line.slice(index + token.length);
       const followingIdentifier = remainingLine.match(/^\s+([A-Za-z_]\w*)/)?.[1];
-      const symbol = symbols.get(token);
-      const typeOverride = token.startsWith("?") && followingIdentifier
-        ? types.get(symbols.get(followingIdentifier)?.typeOverrideId ?? "")
+      const symbol = symbolAt(token, lineIndex);
+      const declaredSymbol = symbolAt(followingIdentifier, lineIndex);
+      const typeOverride = (token.startsWith("?") || typeTokenPattern.test(token))
+        ? declaredSymbol?.typeOverride
+          ?? types.get(declaredSymbol?.typeOverrideId ?? "")
         : undefined;
       span.className = token.startsWith("//")
         ? "token-comment"
@@ -223,11 +251,11 @@ function renderCode(result: AnalysisResult): void {
                     : /^\s*\(/.test(remainingLine)
                       ? "token-function"
                       : "token-identifier";
-      if (typeOverride && symbol === undefined) {
+      if (typeOverride && declaredSymbol) {
         span.dataset.typeOverrideId = typeOverride.id;
-        const open = () => openTypePopover(symbols.get(followingIdentifier!)!, typeOverride, span);
-        makeInteractiveCodeToken(span, "code-type-override", "Choose this output type", open);
-      } else if (symbol) {
+        const open = () => openTypePopover(declaredSymbol, typeOverride, span);
+        makeInteractiveCodeToken(span, "code-type-override", "Choose this value type", open);
+      } else if (symbol && symbol.renameable !== false) {
         span.dataset.symbolId = symbol.id;
         const open = () => openRenamePopover(symbol, span);
         makeInteractiveCodeToken(span, "code-symbol", `Rename ${symbol.name}`, open);
@@ -288,18 +316,277 @@ function renderDiagnostics(result: AnalysisResult): number {
   return warnings;
 }
 
-function renderTypeOverrides(result: AnalysisResult): void {
-  functionCount.textContent = String(result.typeOverrideGroups.length);
-  if (result.typeOverrideGroups.length === 0) {
+function functionOutputValue(
+  output: FunctionDependencyNode["outputs"][number],
+): TypeOverrideValue {
+  const override = typeOverrides.get(output.id);
+  return {
+    id: output.id,
+    name: output.name,
+    type: override ?? output.type,
+    status: override
+      ? "overridden"
+      : output.confidence === "minimum"
+        ? "minimum"
+        : output.type
+          ? "inferred"
+          : "unknown",
+  };
+}
+
+function functionNodeIn(
+  nodes: readonly FunctionDependencyNode[],
+  target: string,
+): FunctionDependencyNode | undefined {
+  for (const node of nodes) {
+    if (node.target === target) return node;
+    const nested = functionNodeIn(node.children, target);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function currentRequest() {
+  return {
+    outputId: outputSelect.value,
+    typeOverrides,
+    staticSwitchOverrides,
+    nameOverrides,
+    formatting,
+    functionMode,
+    functionModeOverrides,
+    allowLargeInline,
+  };
+}
+
+function replaceDefinitions(next: ReadonlyMap<string, string>): void {
+  functionDefinitions.clear();
+  for (const entry of next) functionDefinitions.set(...entry);
+  volatileFunctionLibrary = !persistStringMap(
+    sessionStorage,
+    functionDefinitionStorageKey,
+    functionDefinitions,
+  );
+}
+
+function acceptFunctionDefinition(target: string, source: string): void {
+  if (!acceptedSource) return;
+  try {
+    const candidateDefinitions = new Map(functionDefinitions);
+    candidateDefinitions.set(target, source);
+    const candidateWorkspace = createAnalysisWorkspace(acceptedSource, candidateDefinitions);
+    const validationResult = candidateWorkspace.analyze({
+      ...currentRequest(),
+      functionMode: "types",
+      allowLargeInline: false,
+    });
+    const candidate = functionNodeIn(validationResult.functionTree, target);
+    if (!candidate || candidate.status !== "defined") {
+      setStatus(candidate?.error ?? "This clipboard is not a complete matching Material Function.", "error");
+      return;
+    }
+    replaceDefinitions(candidateDefinitions);
+    acceptedWorkspace = candidateWorkspace;
+    allowLargeInline = false;
+    acceptedResult = candidateWorkspace.analyze(currentRequest());
+    renderAccepted(acceptedResult);
+    if (!volatileFunctionLibrary) {
+      setStatus(`${candidate.name} definition loaded for this tab.`, "success");
+    }
+  } catch (error) {
+    setStatus(`Could not load function definition: ${error instanceof Error ? error.message : String(error)}`, "error");
+  }
+}
+
+async function pasteFunctionDefinition(target: string): Promise<void> {
+  try {
+    acceptFunctionDefinition(target, await navigator.clipboard.readText());
+  } catch (error) {
+    setStatus(`Could not read function definition: ${error instanceof Error ? error.message : String(error)}`, "error");
+  }
+}
+
+function removeFunctionDefinition(target: string): void {
+  const next = new Map(functionDefinitions);
+  next.delete(target);
+  replaceDefinitions(next);
+  if (!acceptedSource) return;
+  acceptedWorkspace = createAnalysisWorkspace(acceptedSource, functionDefinitions);
+  acceptedResult = acceptedWorkspace.analyze(currentRequest());
+  renderAccepted(acceptedResult);
+}
+
+function renderMaterialFunctions(result: AnalysisResult): void {
+  const uniqueTargets = new Set<string>();
+  const count = (nodes: readonly FunctionDependencyNode[]): void => {
+    for (const node of nodes) {
+      uniqueTargets.add(node.target);
+      count(node.children);
+    }
+  };
+  count(result.functionTree);
+  functionCount.textContent = String(uniqueTargets.size);
+  clearFunctionLibrary.disabled = functionDefinitions.size === 0;
+  if (!result.functionTree.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "No unresolved or inferred types in this output.";
+    empty.textContent = "No Material Functions in this clipboard.";
+    materialFunctions.replaceChildren(empty);
+    return;
+  }
+
+  const renderNodes = (nodes: readonly FunctionDependencyNode[], depth: number): DocumentFragment => {
+    const fragment = document.createDocumentFragment();
+    for (const node of nodes) {
+      const card = document.createElement("section");
+      card.className = `function-card function-definition ${node.status}`;
+      card.style.setProperty("--function-depth", String(depth));
+
+      const heading = document.createElement("div");
+      heading.className = "function-heading function-definition-heading";
+      const title = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = node.name;
+      const meta = document.createElement("span");
+      meta.className = "function-state";
+      meta.textContent = [
+        node.status === "defined" ? "Defined" : node.status === "invalid" ? "Invalid" : "Missing",
+        node.shared ? "Shared" : "",
+        node.cycle ? "Cycle" : "",
+        `${node.callCount} call${node.callCount === 1 ? "" : "s"}`,
+      ].filter(Boolean).join(" · ");
+      title.append(name, meta);
+
+      const actions = document.createElement("div");
+      actions.className = "function-actions";
+      const mode = document.createElement("select");
+      mode.title = "Override the global Material Function rendering mode for this asset.";
+      mode.setAttribute("aria-label", `${node.name} rendering mode`);
+      for (const [value, label] of [
+        ["", "Inherit"],
+        ["types", "Types only"],
+        ["helpers", "Helper"],
+        ["inline", "Inline"],
+      ]) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        mode.append(option);
+      }
+      mode.value = functionModeOverrides.get(node.target) ?? "";
+      mode.addEventListener("change", () => {
+        if (mode.value) functionModeOverrides.set(node.target, mode.value as FunctionExpansionMode);
+        else functionModeOverrides.delete(node.target);
+        persistStringMap(sessionStorage, functionModeStorageKey, functionModeOverrides);
+        allowLargeInline = false;
+        reanalyzeAccepted();
+      });
+      const paste = document.createElement("button");
+      paste.type = "button";
+      paste.textContent = node.status === "defined" ? "Replace" : "Paste definition";
+      paste.addEventListener("click", () => void pasteFunctionDefinition(node.target));
+      actions.append(mode);
+      if (node.status === "defined") {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Remove";
+        remove.addEventListener("click", () => removeFunctionDefinition(node.target));
+        actions.append(remove);
+      }
+      heading.append(title, actions);
+      const pasteFallback = document.createElement("textarea");
+      pasteFallback.className = "function-definition-paste";
+      pasteFallback.rows = 1;
+      pasteFallback.spellcheck = false;
+      pasteFallback.placeholder = "Begin Object ...";
+      pasteFallback.setAttribute("aria-label", `Paste ${node.name} definition`);
+      pasteFallback.title = "Click here and press Ctrl+V to paste this Material Function definition.";
+      pasteFallback.addEventListener("paste", (event) => {
+        const source = event.clipboardData?.getData("text/plain");
+        if (!source) return;
+        event.preventDefault();
+        pasteFallback.value = "";
+        acceptFunctionDefinition(node.target, source);
+      });
+      const pasteRow = document.createElement("div");
+      pasteRow.className = "function-definition-paste-row";
+      pasteRow.append(pasteFallback, paste);
+      card.append(heading, pasteRow);
+
+      if (node.error) {
+        const error = document.createElement("p");
+        error.className = "function-error";
+        error.textContent = node.error;
+        card.append(error);
+      }
+      for (const summary of node.outputs) {
+        const output = functionOutputValue(summary);
+        const row = document.createElement("label");
+        row.className = "function-output";
+        const label = document.createElement("span");
+        label.textContent = `Output · ${output.name}`;
+        const select = document.createElement("select");
+        select.className = `type-select ${output.status}`;
+        select.title = output.type
+          ? `The loaded graph derives ${output.type}. Choose another type only if Unreal proves otherwise.`
+          : "The graph still cannot derive this output type. Choose the type shown inside Unreal.";
+        populateTypeSelect(select, output);
+        select.addEventListener("change", () => {
+          setTypeOverride(output.id, select.value as MaterialType | "");
+          reanalyzeAccepted();
+        });
+        row.append(label, select);
+        card.append(row);
+      }
+
+      if (node.staticSwitches.length) {
+        const switches = document.createElement("div");
+        switches.className = "nested-switches";
+        for (const control of node.staticSwitches) {
+          const label = document.createElement("label");
+          label.className = "switch-toggle";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = staticSwitchOverrides.get(control.id) ?? control.value;
+          checkbox.title = "Override this Static Switch inside the loaded function definition.";
+          const text = document.createElement("span");
+          text.textContent = `${control.label}: ${checkbox.checked ? "True" : "False"}`;
+          checkbox.addEventListener("change", () => {
+            staticSwitchOverrides.set(control.id, checkbox.checked);
+            text.textContent = `${control.label}: ${checkbox.checked ? "True" : "False"}`;
+            reanalyzeAccepted();
+          });
+          label.append(checkbox, text);
+          switches.append(label);
+        }
+        card.append(switches);
+      }
+      if (node.children.length) {
+        const children = document.createElement("div");
+        children.className = "function-children";
+        children.append(renderNodes(node.children, depth + 1));
+        card.append(children);
+      }
+      fragment.append(card);
+    }
+    return fragment;
+  };
+  materialFunctions.replaceChildren(renderNodes(result.functionTree, 0));
+}
+
+function renderTypeOverrides(result: AnalysisResult): void {
+  const groups = result.typeOverrideGroups.filter((group) => group.kind === "custom-node");
+  customCount.textContent = String(groups.length);
+  if (groups.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No unresolved Custom HLSL inputs in this output.";
     typeOverridesPanel.replaceChildren(empty);
     return;
   }
 
   const fragment = document.createDocumentFragment();
-  for (const group of result.typeOverrideGroups) {
+  for (const group of groups) {
     const card = document.createElement("section");
     const hasUnknown = group.values.some((output) => output.status === "unknown");
     const hasInferred = group.values.some(
@@ -417,15 +704,34 @@ function renderAccepted(result: AnalysisResult): void {
   inputMeta.textContent = `${result.nodeCount} nodes · ${result.outputs.length} outputs`;
   const warnings = renderDiagnostics(result);
   renderStaticSwitches(result);
+  renderMaterialFunctions(result);
   renderTypeOverrides(result);
+  generateLargeInline.hidden = !result.inlineExpansion?.blocked;
   let reviewTypes = 0;
-  for (const item of result.typeOverrideGroups) {
+  const reviewedFunctionOutputs = new Set<string>();
+  for (const item of result.typeOverrideGroups.filter((group) => group.kind === "custom-node")) {
     for (const output of item.values) {
       if (output.status !== "overridden") reviewTypes += 1;
     }
   }
+  const reviewFunctionTypes = (nodes: readonly FunctionDependencyNode[]): void => {
+    for (const node of nodes) {
+      for (const output of node.outputs) {
+        if (!reviewedFunctionOutputs.has(output.id) && !typeOverrides.has(output.id) && !output.type) {
+          reviewTypes += 1;
+          reviewedFunctionOutputs.add(output.id);
+        }
+      }
+      reviewFunctionTypes(node.children);
+    }
+  };
+  reviewFunctionTypes(result.functionTree);
   setStatus(
-    warnings
+    volatileFunctionLibrary
+      ? "Analysis completed, but sessionStorage is full. Loaded definitions will be lost on refresh."
+      : result.inlineExpansion?.blocked
+      ? `Inline expansion would create about ${result.inlineExpansion.estimatedNodes.toLocaleString()} nodes. Confirm to generate it.`
+      : warnings
       ? `Analysis completed with ${warnings} diagnostic${warnings === 1 ? "" : "s"}.`
       : reviewTypes
         ? `Analysis completed. Review ${reviewTypes} unresolved or inferred type${reviewTypes === 1 ? "" : "s"}.`
@@ -441,7 +747,11 @@ function analyzeRequestedSource(): void {
     return;
   }
 
-  const result = analyzeClipboard(source, { formatting, nameOverrides });
+  const workspace = createAnalysisWorkspace(source, functionDefinitions);
+  const result = workspace.analyze({
+    ...currentRequest(),
+    outputId: undefined,
+  });
   const failed = result.outputs.length === 0 || result.diagnostics.some(
     (item) => item.severity === "error" && item.code !== "graph-cycle",
   );
@@ -457,21 +767,17 @@ function analyzeRequestedSource(): void {
   }
 
   acceptedSource = source;
+  acceptedWorkspace = workspace;
   typeOverrides.clear();
   staticSwitchOverrides.clear();
+  allowLargeInline = false;
   acceptedResult = result;
   renderAccepted(result);
 }
 
 function reanalyzeAccepted(): void {
-  if (!acceptedSource) return;
-  acceptedResult = analyzeClipboard(acceptedSource, {
-    outputId: outputSelect.value,
-    typeOverrides,
-    staticSwitchOverrides,
-    nameOverrides,
-    formatting,
-  });
+  if (!acceptedWorkspace) return;
+  acceptedResult = acceptedWorkspace.analyze(currentRequest());
   renderAccepted(acceptedResult);
 }
 
@@ -491,7 +797,13 @@ function applyCodePopover(): void {
     codePopoverError.hidden = false;
     return;
   }
-  if (acceptedResult?.editableSymbols.some((symbol) => symbol.id !== state.symbol.id && symbol.name === name)) {
+  const scopeStart = state.symbol.startLine ?? 0;
+  const scopeEnd = state.symbol.endLine ?? Number.POSITIVE_INFINITY;
+  if (acceptedResult?.editableSymbols.some((symbol) =>
+    symbol.id !== state.symbol.id
+    && symbol.name === name
+    && (symbol.startLine ?? 0) <= scopeEnd
+    && (symbol.endLine ?? Number.POSITIVE_INFINITY) >= scopeStart)) {
     codePopoverError.textContent = "This name is already used by another declaration.";
     codePopoverError.hidden = false;
     return;
@@ -524,10 +836,19 @@ document.addEventListener("pointerdown", (event) => {
   if (!codePopover.hidden && target instanceof Node && !codePopover.contains(target)) closeCodePopover();
 });
 
-outputSelect.addEventListener("change", reanalyzeAccepted);
+outputSelect.addEventListener("change", () => {
+  allowLargeInline = false;
+  reanalyzeAccepted();
+});
 
 bundleFormat.addEventListener("change", () => {
   formatting.bundleFormat = bundleFormat.value as AnalysisFormatting["bundleFormat"];
+  reanalyzeAccepted();
+});
+
+functionModeSelect.addEventListener("change", () => {
+  functionMode = functionModeSelect.value as FunctionExpansionMode;
+  allowLargeInline = false;
   reanalyzeAccepted();
 });
 
@@ -558,6 +879,21 @@ simplifyAlgebra.addEventListener("change", () => {
 
 syntaxHighlighting.addEventListener("change", () => {
   code.classList.toggle("syntax-disabled", !syntaxHighlighting.checked);
+});
+
+clearFunctionLibrary.addEventListener("click", () => {
+  replaceDefinitions(new Map());
+  functionModeOverrides.clear();
+  persistStringMap(sessionStorage, functionModeStorageKey, functionModeOverrides);
+  if (!acceptedSource) return;
+  acceptedWorkspace = createAnalysisWorkspace(acceptedSource);
+  acceptedResult = acceptedWorkspace.analyze(currentRequest());
+  renderAccepted(acceptedResult);
+});
+
+generateLargeInline.addEventListener("click", () => {
+  allowLargeInline = true;
+  reanalyzeAccepted();
 });
 
 copyButton.addEventListener("click", async () => {

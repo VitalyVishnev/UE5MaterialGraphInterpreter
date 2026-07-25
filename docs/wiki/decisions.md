@@ -2,6 +2,31 @@
 
 This page stores active project contracts. Rejected or superseded approaches belong in [experiments.md](experiments.md); current limitations and bugs belong in [known-bugs.md](known-bugs.md).
 
+## Decision: User-supplied Material Function definitions form a session-local library
+
+Status: Active
+
+Context:
+An external Material Function call exposes its asset identity and stable input/output IDs but not its internal graph or independently declared output type. Function names are not sufficient type evidence, and large materials become unreadable when every call remains opaque.
+
+Decision:
+Bind a pasted internal function clipboard to the card for one full Unreal asset path. Accept it only when the complete sets of stable Function Input and Function Output IDs match every discovered call site and every declared output is connected. Store accepted definitions and per-asset expansion modes in `sessionStorage`. Build one recursive Function Dependency Tree for the root clipboard and reuse each canonical definition across repeated calls.
+
+Offer three rendering modes. `Types only` uses loaded graph evidence without expanding calls. `Helper functions` is the default and emits only selected-output-reachable definitions dependency-first. `Inline functions` expands Graph IR per call site with namespaced identities. Missing definitions and cyclic edges remain opaque; inline expansion above 10,000 estimated node instances requires one-state confirmation.
+
+Reasoning:
+The supplied clipboard is deterministic first-party evidence from the user's open Unreal project. Exact IDs prevent accidental attachment of a similarly named or stale function. Graph-level expansion preserves links, types, switches, and repeated-call identity more safely than replacing rendered text.
+
+Consequences:
+Definitions are private to the current browser tab, survive refresh, and disappear when the tab closes. There is no backend, import/export, or Unreal asset reader. The output remains explanatory pseudo-HLSL rather than Unreal compiler code. Static Bool Function Inputs are specialized per authored call site; identical serialized configurations share one UI control.
+
+Related files:
+
+- `src/functions/library.ts`
+- `src/analyze.ts`
+- `src/main.ts`
+- `tests/function-library.test.ts`
+
 ## Decision: Sample-capture visual language is the initial UI baseline
 
 Status: Active
@@ -460,7 +485,7 @@ Context:
 Numeric promotion existed separately in inference and pseudo-HLSL generation. Math input aliases, serialized default properties, rendering, and type relations were divided between the Expression Semantics Registry and special-case switches. The DOM Adapter also imported generator internals and repeated the same analysis call for every control.
 
 Decision:
-Make `material-types` the only Module for numeric family/width algebra. Make the Expression Semantics Registry own common Math rendering metadata, input aliases/default properties, output fallbacks, and type relations; retain special generator cases only where clipboard properties change actual semantics. Expose one named-request application Seam through `analyzeClipboard(source, request?)`, and keep reanalysis in one UI function.
+Make `material-types` the only Module for numeric family/width algebra. Make the Expression Semantics Registry own common Math rendering metadata, input aliases/default properties, output fallbacks, and type relations; retain special generator cases only where clipboard properties change actual semantics. Expose one named-request application seam through `createAnalysisWorkspace(...).analyze(request)`, retain `analyzeClipboard(source, request?)` as the compatibility wrapper, and keep reanalysis in one UI function.
 
 Do not split `generate.ts` merely because it is large. Its public Interface remains small, and its translation, declaration planning, and rendering state have high Locality inside one output-slice operation.
 
@@ -475,6 +500,8 @@ Related files:
 - `src/graph/material-types.ts`
 - `src/graph/expression-semantics.ts`
 - `src/graph/infer-types.ts`
+- `src/functions/library.ts`
+- `src/analyze.ts`
 - `src/pseudo-hlsl/generate.ts`
 - `src/analyze.ts`
 - `src/main.ts`
@@ -579,13 +606,13 @@ Context:
 The graph author may know the real intent behind a generated temporary name or the type of an opaque Material Function result. The generated code is the useful reading surface, while Unreal remains the source of graph structure and semantics.
 
 Decision:
-Expose declaration names and unresolved external-function result types directly in the pseudo-HLSL. Name Overrides are keyed by serialized `NodeGuid + Output PinId` and stored in `sessionStorage`; the generator receives them through `analyzeClipboard`. Inline types reuse the existing Type Override contract and dropdown. Do not edit clipboard text or add a general code editor.
+Expose declaration names and every unresolved or inferred declaration type directly in the pseudo-HLSL. Name and value-type overrides use serialized `NodeGuid + Output PinId` identities where available and remain in `sessionStorage`; external function results retain their shared asset-path/output identity. The Analysis Workspace scopes click metadata to the main graph, each helper definition, or each namespaced inline call so textual name collisions cannot redirect an edit. Helper signature types reuse the canonical function-output override. Do not edit clipboard text or add a general code editor.
 
 Reasoning:
 This preserves a small deterministic analysis Interface while making the rendered explanation immediately adjustable. Session scope avoids implying that an override has become Unreal graph data or a shareable asset definition.
 
 Consequences:
-Copying a full or partial graph with the same serialized GUID retains an authored name in the current tab. A clipboard fragment without `NodeGuid` uses a temporary node-ID fallback. Manual names affect presentation only; they neither rename Unreal nodes nor change graph execution.
+Copying a full or partial graph with the same serialized GUID retains an authored name in the current tab. A clipboard fragment without `NodeGuid` uses a temporary node-ID fallback. Manual names and types affect pseudo-HLSL presentation and inference only; they neither rename Unreal nodes nor change graph execution. The same local identifier may be edited independently in non-overlapping helper scopes.
 
 Related files:
 

@@ -58,6 +58,7 @@ export function sliceOutputs(
   graph: MaterialGraph,
   outputIds: string[],
   staticSwitchOverrides: StaticSwitchOverrides = new Map(),
+  preserveUnspecifiedStaticSwitches = false,
 ): GraphSlice {
   const outputs = outputIds.map((outputId) => {
     const output = graph.outputs.find((candidate) => candidate.id === outputId);
@@ -230,7 +231,10 @@ export function sliceOutputs(
 
     visiting.add(nodeId);
     if (node.kind !== "function-input") {
-      const selectedStaticBranch = staticSwitchClasses.has(node.expressionClass)
+      const preserveStaticSwitch = staticSwitchClasses.has(node.expressionClass)
+        && preserveUnspecifiedStaticSwitches
+        && !staticSwitchOverrides.has(controlFor(node).id);
+      const selectedStaticBranch = staticSwitchClasses.has(node.expressionClass) && !preserveStaticSwitch
         ? selectStaticBranch(node)
         : undefined;
       const inputs = selectedStaticBranch

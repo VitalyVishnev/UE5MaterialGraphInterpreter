@@ -9,7 +9,7 @@ import {
   mathInputNames,
   proceduralNoiseExpression,
 } from "../graph/expression-semantics";
-import { inferTypes } from "../graph/infer-types";
+import { inferTypes, type InferredType } from "../graph/infer-types";
 import {
   castNumericFamily,
   declaredFunctionInputType,
@@ -38,10 +38,23 @@ export interface PseudoHlslResult {
   editableSymbols: EditableSymbol[];
 }
 
+export interface FunctionGenerationKnowledge {
+  outputFacts: ReadonlyMap<string, InferredType>;
+  loadedTargets: ReadonlySet<string>;
+  callNames?: ReadonlyMap<string, string>;
+  callInputOverrides?: ReadonlyMap<string, boolean>;
+  preserveStaticSwitches?: boolean;
+  symbolNamespace?: string;
+}
+
 export interface EditableSymbol {
   id: string;
   name: string;
+  startLine?: number;
+  endLine?: number;
+  renameable?: boolean;
   typeOverrideId?: string;
+  typeOverride?: TypeOverrideValue;
 }
 
 export interface TypeOverrideValue {
@@ -154,7 +167,7 @@ function classShortName(className: string): string {
   return className.replace(/^MaterialExpression/, "") || className;
 }
 
-function materialFunctionName(target: string): string {
+export function materialFunctionName(target: string): string {
   const path = target.match(/"([^"]+)"/)?.[1] ?? target;
   const asset = path.split("/").at(-1) ?? path;
   return identifier(asset.split(".").at(-1) ?? asset);
@@ -175,8 +188,32 @@ function outputKey(nodeId: string, pinId: string): string {
   return `${nodeId}:${pinId}`;
 }
 
-function functionOutputId(target: string, outputIndex: number): string {
+function editableSymbolId(node: GraphNode, pin: GraphPin, namespace?: string): string {
+  const nodeId = `Node:${node.nodeGuid ?? node.properties.get("MaterialExpressionGuid") ?? node.id}:Output:${pin.id}`;
+  return namespace ? `Function:${namespace}:${nodeId}` : nodeId;
+}
+
+function valueTypeOverrideId(node: GraphNode, pin: GraphPin, namespace?: string): string {
+  return `ValueType:${editableSymbolId(node, pin, namespace)}`;
+}
+
+export function functionOutputId(target: string, outputIndex: number): string {
   return `${target}::${outputIndex}`;
+}
+
+function functionInputIds(node: GraphNode): string[] {
+  return [...node.properties]
+    .flatMap(([key, value]) => {
+      const index = key.match(/^FunctionInputs\((\d+)\)$/)?.[1];
+      const id = value.match(/ExpressionInputId=([A-Fa-f0-9]{32})/)?.[1];
+      return index !== undefined && id ? [{ index: Number(index), id: id.toUpperCase() }] : [];
+    })
+    .sort((a, b) => a.index - b.index)
+    .map(({ id }) => id);
+}
+
+function callInputOverrideId(target: string, node: GraphNode, inputId: string): string {
+  return `${target}::call:${node.nodeGuid ?? node.id}::function-input:${inputId}`;
 }
 
 function customInputId(node: GraphNode, pin: GraphPin): string {
@@ -390,9 +427,15 @@ function generatePseudoHlslForOutputs(
   options: PseudoHlslOptions = defaultPseudoHlslOptions,
   staticSwitchOverrides: StaticSwitchOverrides = new Map(),
   nameOverrides: NameOverrides = new Map(),
+  functionKnowledge?: FunctionGenerationKnowledge,
 ): PseudoHlslResult {
   if (outputs.length === 0) throw new Error("At least one graph output is required.");
-  const slice = sliceOutputs(graph, outputs.map((output) => output.id), staticSwitchOverrides);
+  const slice = sliceOutputs(
+    graph,
+    outputs.map((output) => output.id),
+    staticSwitchOverrides,
+    functionKnowledge?.preserveStaticSwitches,
+  );
   const orderedNodes = slice.orderedNodeIds.map((nodeId) => graph.nodes.get(nodeId)!);
   const commentRegionNodeCounts = new Map<string, number>();
   for (const node of graph.nodes.values()) {
@@ -415,12 +458,19 @@ function generatePseudoHlslForOutputs(
     }
   }
   const valueOverrides = new Map<string, MaterialType>();
+  const initialFacts = new Map<string, InferredType>();
   for (const node of orderedNodes) {
+    for (const pin of outputPins(node)) {
+      const override = overrides.get(valueTypeOverrideId(node, pin, functionKnowledge?.symbolNamespace));
+      if (override) valueOverrides.set(outputKey(node.id, pin.id), override);
+    }
     if (node.kind === "external-call") {
       const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
       outputPins(node).forEach((pin, index) => {
         const override = overrides.get(functionOutputId(target, index));
         if (override) valueOverrides.set(outputKey(node.id, pin.id), override);
+        const fact = functionKnowledge?.outputFacts.get(functionOutputId(target, index));
+        if (fact) initialFacts.set(outputKey(node.id, pin.id), fact);
       });
     }
     if (node.kind === "custom") {
@@ -431,7 +481,7 @@ function generatePseudoHlslForOutputs(
       }
     }
   }
-  const typeInference = inferTypes(graph, slice, valueOverrides);
+  const typeInference = inferTypes(graph, slice, valueOverrides, initialFacts);
   const diagnostics: Diagnostic[] = [
     ...graph.diagnostics,
     ...slice.diagnostics,
@@ -451,22 +501,41 @@ function generatePseudoHlslForOutputs(
     return candidate;
   };
 
-  const symbolId = (node: GraphNode, pin: GraphPin): string =>
-    `Node:${node.nodeGuid ?? node.properties.get("MaterialExpressionGuid") ?? node.id}:Output:${pin.id}`;
   const preferredName = (node: GraphNode, pin: GraphPin, fallback: string): string =>
-    nameOverrides.get(symbolId(node, pin)) ?? fallback;
+    nameOverrides.get(editableSymbolId(node, pin, functionKnowledge?.symbolNamespace)) ?? fallback;
   const externalTypeOverrideId = (node: GraphNode, pin: GraphPin): string | undefined => {
     if (node.kind !== "external-call") return undefined;
     const index = outputPins(node).findIndex((candidate) => candidate.id === pin.id);
     if (index < 0) return undefined;
     return functionOutputId(node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction", index);
   };
-  const registerSymbol = (node: GraphNode, pin: GraphPin, name: string): void => {
-    const id = symbolId(node, pin);
+  const registerSymbol = (node: GraphNode, pin: GraphPin, name: string, value?: Value): void => {
+    const id = editableSymbolId(node, pin, functionKnowledge?.symbolNamespace);
+    const typeOverrideId = externalTypeOverrideId(node, pin)
+      ?? valueTypeOverrideId(node, pin, functionKnowledge?.symbolNamespace);
+    const override = overrides.get(typeOverrideId);
+    const typeOverride = value && (
+      override
+      || value.type === "unknown"
+      || value.confidence === "inferred"
+      || value.confidence === "minimum"
+    ) ? {
+        id: typeOverrideId,
+        name,
+        type: override ?? (value.type === "unknown" ? undefined : value.type as MaterialType),
+        status: override
+          ? "overridden" as const
+          : value.type === "unknown"
+            ? "unknown" as const
+            : value.confidence === "minimum"
+              ? "minimum" as const
+              : "inferred" as const,
+      } : undefined;
     editableSymbols.set(id, {
       id,
       name,
-      typeOverrideId: externalTypeOverrideId(node, pin),
+      typeOverrideId: typeOverride?.id,
+      typeOverride,
     });
   };
 
@@ -503,6 +572,11 @@ function generatePseudoHlslForOutputs(
     switch (className) {
       case "MaterialExpressionConstant":
         return { code: number(node.properties.get("R")), type: "float" };
+      case "MaterialExpressionInlineLiteral":
+        return {
+          code: literal(node.properties.get("Code") ?? "0.0"),
+          type: node.properties.get("Type") ?? "unknown",
+        };
       case "MaterialExpressionConstant2Vector": {
         const x = input(node, ["X"]);
         const y = input(node, ["Y"]);
@@ -539,8 +613,16 @@ function generatePseudoHlslForOutputs(
           type: declaredFunctionInputType(node.properties.get("InputType")) ?? "unknown",
         };
       case "MaterialExpressionStaticSwitch":
-      case "MaterialExpressionStaticSwitchParameter":
-        return input(node, [slice.staticSwitchSelections.get(node.id) ? "True" : "False"]);
+      case "MaterialExpressionStaticSwitchParameter": {
+        const selection = slice.staticSwitchSelections.get(node.id);
+        if (selection !== undefined) return input(node, [selection ? "True" : "False"]);
+        const condition = node.expressionClass === "MaterialExpressionStaticSwitchParameter"
+          ? identifier(node.displayName ?? "StaticSwitch")
+          : input(node, ["Value"]).code;
+        const trueValue = input(node, ["True"]);
+        const falseValue = input(node, ["False"]);
+        return callValue("StaticSwitch", [condition, trueValue.code, falseValue.code], trueValue.type);
+      }
       case "MaterialExpressionReroute":
       case "MaterialExpressionNamedRerouteDeclaration":
       case "MaterialExpressionNamedRerouteUsage":
@@ -765,18 +847,29 @@ function generatePseudoHlslForOutputs(
         return callValue(callName, inputs.map(({ value }) => value.code), "unknown", true);
       }
       case "MaterialExpressionMaterialFunctionCall": {
-        const args = inputPins(node).map((pin) => linkedValue(node, pin).code);
         const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
-        const functionName = materialFunctionName(target);
+        const inputIds = functionInputIds(node);
+        const args = inputPins(node).map((pin, index) => {
+          const inputId = inputIds[index];
+          const override = inputId
+            ? functionKnowledge?.callInputOverrides?.get(callInputOverrideId(target, node, inputId))
+            : undefined;
+          return override === undefined ? linkedValue(node, pin).code : String(override);
+        });
+        const functionName = functionKnowledge?.callNames?.get(target) ?? materialFunctionName(target);
         diagnostics.push({
           code: "external-function",
-          severity: "warning",
-          message: `Material Function ${functionName} at ${target} is not expanded; rendered as ${functionName}(...).`,
+          severity: functionKnowledge?.loadedTargets.has(target) ? "info" : "warning",
+          message: functionKnowledge?.loadedTargets.has(target)
+            ? `Material Function ${functionName} is loaded and rendered as ${functionName}(...).`
+            : `Material Function ${functionName} at ${target} has no definition; rendered as ${functionName}(...).`,
           line: node.startLine,
           nodeId: node.id,
         });
         return callValue(functionName, args, "unknown", true);
       }
+      case "MaterialExpressionInlinedFunctionCall":
+        return linkedValue(node, pinByName(node, `InlineOutput:${sourcePin.id}`));
       default: {
         const noise = proceduralNoiseExpression(node);
         if (noise) {
@@ -959,12 +1052,12 @@ function generatePseudoHlslForOutputs(
             terminalNamedRerouteName(node.id, pin) ?? externalResultBaseName(node, pin),
           ),
         );
-        registerSymbol(node, pin, name);
         const value: Value = {
           code: name,
           type: fact?.type ?? "unknown",
           confidence: fact?.confidence,
         };
+        registerSymbol(node, pin, name, value);
         values.set(outputKey(node.id, pin.id), value);
         return { pin, name, value };
       });
@@ -1009,7 +1102,7 @@ function generatePseudoHlslForOutputs(
       const name = uniqueName(primaryPin
         ? preferredName(node, primaryPin, authored ?? commentName ?? "constant3")
         : authored ?? commentName ?? "constant3");
-      if (primaryPin) registerSymbol(node, primaryPin, name);
+      if (primaryPin) registerSymbol(node, primaryPin, name, { code: name, type: "float3" });
       declarations.push({
         code: `const float3 ${name} = ${vector(node.properties.get("Constant"), 3)};`,
         commentRegions: options.commentSections ? node.commentRegions : undefined,
@@ -1065,7 +1158,7 @@ function generatePseudoHlslForOutputs(
         pin,
         terminalName ?? authored ?? commentName ?? generatedBaseName,
       ));
-      registerSymbol(node, pin, name);
+      registerSymbol(node, pin, name, value);
       const preamble = node.kind === "function-input" || functionInputSymbols.has(value.code);
       values.set(key, { code: name, type: value.type, confidence: value.confidence });
       declarations.push({
@@ -1105,6 +1198,17 @@ function generatePseudoHlslForOutputs(
       spaced: options.spaceComplexOperations && Boolean(value && isComplexValue(value)),
       output: true,
     });
+    if (value && output.sourceNodeId && output.sourcePinId) {
+      const sourceNode = graph.nodes.get(output.sourceNodeId);
+      const sourcePin = sourceNode?.pins.find((pin) => pin.id === output.sourcePinId);
+      if (
+        sourceNode
+        && sourcePin
+        && !editableSymbols.has(editableSymbolId(sourceNode, sourcePin, functionKnowledge?.symbolNamespace))
+      ) {
+        registerSymbol(sourceNode, sourcePin, name, value);
+      }
+    }
     return { fieldName, name, value };
   });
 
@@ -1239,10 +1343,19 @@ export function generatePseudoHlsl(
   options: PseudoHlslOptions = defaultPseudoHlslOptions,
   staticSwitchOverrides: StaticSwitchOverrides = new Map(),
   nameOverrides: NameOverrides = new Map(),
+  functionKnowledge?: FunctionGenerationKnowledge,
 ): PseudoHlslResult {
   const output = graph.outputs.find((candidate) => candidate.id === outputId);
   if (!output) throw new Error(`Unknown graph output: ${outputId}`);
-  return generatePseudoHlslForOutputs(graph, [output], overrides, options, staticSwitchOverrides, nameOverrides);
+  return generatePseudoHlslForOutputs(
+    graph,
+    [output],
+    overrides,
+    options,
+    staticSwitchOverrides,
+    nameOverrides,
+    functionKnowledge,
+  );
 }
 
 export function generateAllPseudoHlsl(
@@ -1251,6 +1364,7 @@ export function generateAllPseudoHlsl(
   options: PseudoHlslOptions = defaultPseudoHlslOptions,
   staticSwitchOverrides: StaticSwitchOverrides = new Map(),
   nameOverrides: NameOverrides = new Map(),
+  functionKnowledge?: FunctionGenerationKnowledge,
 ): PseudoHlslResult {
   return generatePseudoHlslForOutputs(
     graph,
@@ -1259,5 +1373,6 @@ export function generateAllPseudoHlsl(
     options,
     staticSwitchOverrides,
     nameOverrides,
+    functionKnowledge,
   );
 }

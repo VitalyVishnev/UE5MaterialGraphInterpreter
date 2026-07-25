@@ -78,6 +78,14 @@
                   <option value="strict">Strict HLSL-like struct</option>
                 </select>
               </label>
+              <label>
+                <span>Material Functions</span>
+                <select id="function-mode" title="Choose how loaded Material Function definitions appear in pseudo-HLSL">
+                  <option value="types">Types only</option>
+                  <option value="helpers" selected>Helper functions</option>
+                  <option value="inline">Inline functions</option>
+                </select>
+              </label>
               <label class="check-setting" title="Insert section headings from large Unreal graph comment boxes">
                 <input id="show-sections" type="checkbox" checked>
                 <span>Graph comment sections</span>
@@ -129,11 +137,23 @@
             </details>
             <details class="diagnostic-group" open>
               <summary class="subsection-heading">
-                <h3>Type overrides</h3>
+                <h3>Material functions</h3>
                 <span id="function-count" class="meta">0</span>
               </summary>
+              <div class="function-library-actions">
+                <button id="clear-function-library" type="button">Clear session library</button>
+              </div>
+              <div id="material-functions" class="external-functions">
+                <p class="empty">Material Functions found in the clipboard will appear here.</p>
+              </div>
+            </details>
+            <details class="diagnostic-group" open>
+              <summary class="subsection-heading">
+                <h3>Custom input types</h3>
+                <span id="custom-count" class="meta">0</span>
+              </summary>
               <div id="type-overrides" class="external-functions">
-                <p class="empty">External function outputs and unresolved Custom inputs will appear here.</p>
+                <p class="empty">Unresolved Custom HLSL inputs will appear here.</p>
               </div>
             </details>
             <ol id="diagnostics" class="message-list">
@@ -144,7 +164,10 @@
       </section>
 
       <div class="status-row">
-        <p id="status" role="status" aria-live="polite"></p>
+        <div class="status-actions">
+          <p id="status" role="status" aria-live="polite"></p>
+          <button id="generate-large-inline" type="button" hidden>Generate anyway</button>
+        </div>
         <a class="github-link" href="https://github.com/VitalyVishnev/UE5MaterialGraphInterpreter" target="_blank" rel="noopener noreferrer">View on GitHub <span aria-hidden="true">↗</span></a>
       </div>
 

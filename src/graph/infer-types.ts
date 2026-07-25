@@ -96,8 +96,9 @@ export function inferTypes(
   graph: MaterialGraph,
   slice: GraphSlice,
   overrides: ReadonlyMap<string, MaterialType> = new Map(),
+  initialFacts: ReadonlyMap<string, InferredType> = new Map(),
 ): TypeInferenceResult {
-  const facts = new Map<string, InferredType>();
+  const facts = new Map(initialFacts);
   const minimums = new Map<string, NumericType>();
   const conflicts = new Set<string>();
   const orderedNodes = slice.orderedNodeIds.map((nodeId) => graph.nodes.get(nodeId)!);
@@ -184,6 +185,9 @@ export function inferTypes(
       case "MaterialExpressionConstant":
         set(first, "float", "confirmed");
         break;
+      case "MaterialExpressionInlineLiteral":
+        set(first, node.properties.get("Type") as MaterialType | undefined, "confirmed");
+        break;
       case "MaterialExpressionFunctionInput":
         set(first, declaredFunctionInputType(node.properties.get("InputType")), "confirmed");
         break;
@@ -245,6 +249,20 @@ export function inferTypes(
         out,
         ...equivalentExpressionInputs(node).map((name) => linkedMathKey(node, name)),
       ].filter((valueKey): valueKey is string => Boolean(valueKey));
+      if (node.expressionClass === "MaterialExpressionInlinedFunctionCall") {
+        for (const output of outputPins(node)) {
+          const outputValueKey = key(node.id, output.id);
+          const inputValueKey = linkedKey(node, `InlineOutput:${output.id}`);
+          const outputFact = facts.get(outputValueKey);
+          const inputFact = inputValueKey ? facts.get(inputValueKey) : undefined;
+          if (inputFact) {
+            changed = set(outputValueKey, inputFact.type, inputFact.confidence === "confirmed" ? "confirmed" : "inferred") || changed;
+          }
+          if (outputFact) {
+            changed = set(inputValueKey, outputFact.type, "inferred") || changed;
+          }
+        }
+      }
       for (const sourceKey of equivalentKeys) {
         const sourceFact = facts.get(sourceKey);
         if (!sourceFact || !isNumericType(sourceFact.type)) continue;

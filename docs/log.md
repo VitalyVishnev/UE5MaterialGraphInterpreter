@@ -255,3 +255,35 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Restricted blue syntax coloring to types, keywords, and invoked functions.
 - Rendered identifiers, fields, strings, and numeric literals in the warmer yellow code color so dense pseudo-HLSL remains scannable.
 - Added a Formatting checkbox that disables all syntax colors for a neutral white-code view without reanalyzing the graph.
+
+## 2026-07-25 - Session-local Material Function Definition Library
+
+- Added reusable `AnalysisWorkspace` parsing for one root graph and user-supplied function definitions.
+- Added exact stable-ID signature validation, recursive dependency trees, shared/cycle states, session storage, and non-destructive invalid replacement handling.
+- Added `Types only`, dependency-first `Helper functions`, and Graph IR `Inline functions` modes with per-asset overrides.
+- Added definition-derived type facts, call-site Static Bool configuration controls, Material Root `All outputs`, and a 10,000-node inline preflight.
+- Added self-contained coverage for validation, nesting, sharing, cycles, multi-output helper formats, inline isolation, Material Root bundles, call-site switch overrides, invalid session payloads, and storage quota failures.
+
+## 2026-07-25 - Native-paste fallback for function definitions
+
+- Added one empty compact textarea to every Material Function card.
+- Routed `Ctrl+V` through native `ClipboardEvent.clipboardData` and the same exact definition-validation path as the Clipboard API button.
+- Documented the embedded Codex browser's reproducible asynchronous Clipboard Read denial.
+
+## 2026-07-25 - Unified function-definition paste control
+
+- Joined the native-paste field and Clipboard API button into one compact horizontal control.
+- Added a muted `Begin Object ...` placeholder so the expected Unreal clipboard format is visible.
+
+## 2026-07-25 - Function-library polish
+
+- Removed unused definition-source state and repeated pin filtering.
+- Centralized function-scoped Static Switch override projection without changing analysis behavior.
+- Replaced serialized object comparison in definition inference with direct Type Fact comparison.
+
+## 2026-07-25 - Scoped helper and inline code overrides
+
+- Made every unresolved or inferred declaration type directly editable in generated pseudo-HLSL, including internal helper and inline values.
+- Preserved helper-local editable symbols and applied Name Overrides while rendering helper definitions.
+- Scoped code-panel metadata by generated line range so identical identifiers in separate functions cannot steal each other's type or rename controls.
+- Added regression coverage for generic inline type overrides and helper-local renaming.

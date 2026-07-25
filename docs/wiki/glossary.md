@@ -12,7 +12,7 @@ This page defines project-specific terms, workflows, and abbreviations. Use prec
 - `Inferred Type` - a single type derived from surrounding graph constraints rather than declared on the value itself; rendered with a `?` prefix such as `?float2`.
 - `Minimum-width Type` - a lower bound proven by channel use without enough evidence for one exact vector size; rendered with a suffix such as `?float2+`.
 - `Unresolved Type` - a value for which the graph permits multiple types or provides no numeric evidence; rendered as `?type`.
-- `Type Override` - a user-confirmed type for an unresolved external Material Function output or Custom HLSL input. Function-output overrides are keyed by asset path and output index and apply to every matching call; Custom-input overrides are scoped to that Custom node and pin.
+- `Type Override` - a user-confirmed replacement for an unresolved or inferred type. External Function Outputs are keyed by asset path and output index and apply to every matching call; Custom inputs and generated declaration values use their node/pin identity. Code-panel controls are additionally scoped to the main graph, helper, or inline call in which the declaration appears.
 - `Name Override` - a user-authored replacement for one generated pseudo-HLSL declaration name. It is keyed by the serialized Unreal node GUID and output pin ID, with a temporary node-ID fallback for incomplete clipboard text, and retained only in the active browser session.
 - `Editable Symbol` - generator metadata connecting a rendered pseudo-HLSL declaration to its stable Name Override key and, where applicable, its Type Override target.
 - `Static Switch Override` - a user-selected compile-time boolean keyed by the serialized static source; every relevant Static Switch sharing that source uses the same specialization.
@@ -21,3 +21,7 @@ This page defines project-specific terms, workflows, and abbreviations. Use prec
 - `Preamble` - hoisted Function Inputs and their direct named aliases, shown before graph comment sections.
 - `Function Outputs Bundle` - the synthetic `All outputs` result that presents every real Material Function output from one union Graph Slice, either as a readable record or a strict HLSL-like struct.
 - `Expression Semantics Registry` - the evidence-backed built-in-node rules that keep pseudo-HLSL rendering and fixed, pin-specific, arithmetic, branch, conversion, serialized, and same-as-input type contracts together; unlike Type Overrides, these rules are not user-editable asset signatures.
+- `Analysis Workspace` - the reusable application analysis boundary created from one root clipboard and a set of definition sources. It parses those sources once and supports repeated output, formatting, override, and expansion requests.
+- `Function Definition Library` - the session-local collection of Material Function Graph IR definitions keyed by full Unreal asset path and accepted only after exact stable input/output ID validation.
+- `Function Dependency Tree` - the recursive view of every Material Function call reachable in the complete root clipboard and loaded definitions, including missing, invalid, shared, and cyclic edges.
+- `Function Expansion Mode` - one of `Types only`, `Helper functions`, or `Inline functions`; it controls presentation while valid definitions contribute type evidence in every mode.
