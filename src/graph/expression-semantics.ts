@@ -518,6 +518,7 @@ function advancedOutputType(node: GraphNode, pin: GraphPin): MaterialType | unde
 const fixedOutputs: Readonly<Record<string, NumericType>> = {
   MaterialExpressionLength: "float",
   MaterialExpressionTransform: "float3",
+  MaterialExpressionTransformPosition: "float3",
 };
 
 const fixedAdvancedInputTypes: Readonly<Record<string, Readonly<Record<string, MaterialType>>>> = {
@@ -583,13 +584,108 @@ const convertTypes: Readonly<Record<string, NumericType>> = {
   Vector4: "float4",
 };
 
-function convertOutputType(node: GraphNode, pin: GraphPin): NumericType | undefined {
-  const outputs = node.pins.filter((candidate) => candidate.direction === "output");
-  const index = outputs.findIndex((candidate) => candidate.id === pin.id);
-  if (index < 0) return undefined;
-  const serialized = node.properties.get(`ConvertOutputs(${index})`);
-  const type = serialized?.match(/(?:^|[,()])Type=([A-Za-z0-9_]+)/)?.[1];
-  return type ? convertTypes[type] : undefined;
+export interface ConvertPort {
+  type?: NumericType;
+  defaultComponents: readonly number[];
+}
+
+export interface ConvertMapping {
+  inputIndex: number;
+  inputComponentIndex: number;
+  outputIndex: number;
+  outputComponentIndex: number;
+}
+
+export interface ConvertExpressionLayout {
+  inputs: readonly ConvertPort[];
+  outputs: readonly ConvertPort[];
+  mappings: readonly ConvertMapping[];
+  issues: readonly string[];
+}
+
+const convertComponentCount = (type: NumericType | undefined): number =>
+  !type ? 0 : type === "float" ? 1 : Number(type.at(-1));
+
+function indexedPropertyCount(node: GraphNode, prefix: string): number {
+  let count = 0;
+  for (const key of node.properties.keys()) {
+    const index = key.match(new RegExp(`^${prefix}\\((\\d+)\\)$`))?.[1];
+    if (index !== undefined) count = Math.max(count, Number(index) + 1);
+  }
+  return count;
+}
+
+function convertPort(serialized: string | undefined, label: string, issues: string[]): ConvertPort {
+  const serializedType = serialized?.match(/(?:^|[,()])Type=([A-Za-z0-9_]+)/)?.[1] ?? "Scalar";
+  const type = convertTypes[serializedType];
+  if (!type) issues.push(`${label} uses unsupported type ${serializedType}.`);
+  const defaultValue = serialized?.match(/DefaultValue=\(([^)]*)\)/)?.[1] ?? "";
+  const defaultComponents = ["R", "G", "B", "A"].map((component) => {
+    const value = defaultValue.match(
+      new RegExp(`(?:^|,)${component}=([-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?)`),
+    )?.[1];
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+  return { type, defaultComponents };
+}
+
+function convertMapping(serialized: string | undefined): ConvertMapping {
+  const index = (field: string): number => {
+    const value = serialized?.match(new RegExp(`(?:^|[,()])${field}=(\\d+)`))?.[1];
+    return Number(value ?? 0);
+  };
+  return {
+    inputIndex: index("InputIndex"),
+    inputComponentIndex: index("InputComponentIndex"),
+    outputIndex: index("OutputIndex"),
+    outputComponentIndex: index("OutputComponentIndex"),
+  };
+}
+
+/**
+ * Decodes UE's sparse Convert arrays. Omitted array entries and struct fields are
+ * Unreal defaults, so a missing ConvertMappings(0) still represents mapping 0→0.
+ */
+export function convertExpressionLayout(node: GraphNode): ConvertExpressionLayout {
+  const issues: string[] = [];
+  const inputCount = Math.max(
+    node.pins.filter((pin) => pin.direction === "input").length,
+    indexedPropertyCount(node, "ConvertInputs"),
+  );
+  const outputCount = Math.max(
+    node.pins.filter((pin) => pin.direction === "output").length,
+    indexedPropertyCount(node, "ConvertOutputs"),
+  );
+  const inputs = Array.from({ length: inputCount }, (_, index) =>
+    convertPort(node.properties.get(`ConvertInputs(${index})`), `Input ${index + 1}`, issues));
+  const outputs = Array.from({ length: outputCount }, (_, index) =>
+    convertPort(node.properties.get(`ConvertOutputs(${index})`), `Output ${index + 1}`, issues));
+  const mappingCount = Math.max(
+    inputCount > 0 && outputCount > 0 ? 1 : 0,
+    indexedPropertyCount(node, "ConvertMappings"),
+  );
+  const mappings = Array.from({ length: mappingCount }, (_, index) =>
+    convertMapping(node.properties.get(`ConvertMappings(${index})`)));
+  const destinations = new Set<string>();
+
+  for (const [index, mapping] of mappings.entries()) {
+    const inputWidth = convertComponentCount(inputs[mapping.inputIndex]?.type);
+    const outputWidth = convertComponentCount(outputs[mapping.outputIndex]?.type);
+    if (!inputs[mapping.inputIndex]) issues.push(`Mapping ${index} references missing input ${mapping.inputIndex}.`);
+    else if (mapping.inputComponentIndex >= inputWidth) {
+      issues.push(`Mapping ${index} references component ${mapping.inputComponentIndex} outside input ${mapping.inputIndex}.`);
+    }
+    if (!outputs[mapping.outputIndex]) issues.push(`Mapping ${index} references missing output ${mapping.outputIndex}.`);
+    else if (mapping.outputComponentIndex >= outputWidth) {
+      issues.push(`Mapping ${index} references component ${mapping.outputComponentIndex} outside output ${mapping.outputIndex}.`);
+    }
+    const destination = `${mapping.outputIndex}:${mapping.outputComponentIndex}`;
+    if (destinations.has(destination)) issues.push(`Mappings contain duplicate destination ${destination}.`);
+    destinations.add(destination);
+  }
+
+  return { inputs, outputs, mappings, issues };
 }
 
 export function fixedExpressionOutputType(
@@ -623,7 +719,10 @@ export function fixedExpressionOutputType(
   const advancedType = advancedOutputType(node, pin);
   if (advancedType) return advancedType;
   if (node.expressionClass === "MaterialExpressionConvert") {
-    return convertOutputType(node, pin);
+    const index = node.pins
+      .filter((candidate) => candidate.direction === "output")
+      .findIndex((candidate) => candidate.id === pin.id);
+    return index >= 0 ? convertExpressionLayout(node).outputs[index]?.type : undefined;
   }
   return fixedOutputs[node.expressionClass];
 }
@@ -659,6 +758,12 @@ export function fixedExpressionInputType(
   node: GraphNode,
   pin: GraphPin,
 ): MaterialType | undefined {
+  if (node.expressionClass === "MaterialExpressionConvert") {
+    const index = node.pins
+      .filter((candidate) => candidate.direction === "input")
+      .findIndex((candidate) => candidate.id === pin.id);
+    return index >= 0 ? convertExpressionLayout(node).inputs[index]?.type : undefined;
+  }
   if (/^MaterialExpression(?:Vector)?Noise$/.test(node.expressionClass)) {
     if (pin.name === "World Position") return "float3";
     if (pin.name === "FilterWidth") return "float";
@@ -666,6 +771,10 @@ export function fixedExpressionInputType(
   const fixedAdvanced = fixedAdvancedInputTypes[node.expressionClass]?.[pin.name];
   if (fixedAdvanced) return fixedAdvanced;
   if (node.expressionClass === "MaterialExpressionTransform" && pin.name === "Input") return "float3";
+  if (node.expressionClass === "MaterialExpressionTransformPosition") {
+    if (pin.name === "Input") return "float3";
+    if (pin.name === "Periodic World Tile Size") return "float";
+  }
   if (node.expressionClass === "MaterialExpressionConstantBiasScale"
     && (pin.name === "Bias" || pin.name === "Scale")) return "float";
   if (node.expressionClass === "MaterialExpressionRotateAboutAxis") {

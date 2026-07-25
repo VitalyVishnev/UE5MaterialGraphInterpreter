@@ -55,6 +55,219 @@ describe("generatePseudoHlsl", () => {
     expect(result.code).toBe(generatePseudoHlsl(graph, graph.outputs[0].id).code);
   });
 
+  it("renders a component-swapping Convert as a swizzle", () => {
+    const source: GraphNode = {
+      id: "Source",
+      expressionClass: "MaterialExpressionFunctionInput",
+      kind: "function-input",
+      properties: new Map([["InputType", "FunctionInput_Vector2"]]),
+      pins: [{ id: "SourceOut", name: "Output", direction: "output", links: [] }],
+      startLine: 1,
+      displayName: "InputUV",
+    };
+    const convert: GraphNode = {
+      id: "Convert",
+      expressionClass: "MaterialExpressionConvert",
+      kind: "expression",
+      properties: new Map([
+        ["ConvertInputs(0)", "(Type=Vector2)"],
+        ["ConvertOutputs(0)", "(Type=Vector2)"],
+        ["ConvertMappings(0)", "(OutputComponentIndex=1)"],
+        ["ConvertMappings(1)", "(InputComponentIndex=1)"],
+      ]),
+      pins: [
+        {
+          id: "ConvertIn",
+          name: "Input",
+          direction: "input",
+          links: [{ nodeId: "Source", pinId: "SourceOut" }],
+        },
+        { id: "ConvertOut", name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    };
+    const output: GraphNode = {
+      id: "Output",
+      expressionClass: "MaterialExpressionFunctionOutput",
+      kind: "function-output",
+      properties: new Map([["OutputName", "Swapped"]]),
+      pins: [],
+      startLine: 1,
+    };
+    const graph: MaterialGraph = {
+      nodes: new Map([source, convert, output].map((item) => [item.id, item])),
+      outputs: [{
+        id: "Output:Input",
+        label: "Swapped",
+        ownerNodeId: "Output",
+        ownerPinId: "OutputIn",
+        sourceNodeId: "Convert",
+        sourcePinId: "ConvertOut",
+      }],
+      diagnostics: [],
+    };
+
+    const result = generatePseudoHlsl(graph, graph.outputs[0].id);
+    expect(result.code).toContain("return InputUV.gr;");
+    expect(result.code).not.toContain("Convert(");
+  });
+
+  it("inlines a repeated single-component Convert projection", () => {
+    const source: GraphNode = {
+      id: "Source",
+      expressionClass: "MaterialExpressionFunctionInput",
+      kind: "function-input",
+      properties: new Map(),
+      pins: [{ id: "SourceOut", name: "Output", direction: "output", links: [] }],
+      startLine: 1,
+      displayName: "WorkingNorm",
+    };
+    const convert: GraphNode = {
+      id: "Convert",
+      expressionClass: "MaterialExpressionConvert",
+      kind: "expression",
+      properties: new Map([
+        ["ConvertInputs(0)", "(Type=Vector3)"],
+        ["ConvertOutputs(0)", "()"],
+        ["ConvertMappings(0)", "(InputComponentIndex=1)"],
+      ]),
+      pins: [
+        {
+          id: "ConvertIn",
+          name: "Input",
+          direction: "input",
+          links: [{ nodeId: "Source", pinId: "SourceOut" }],
+        },
+        { id: "ConvertOut", name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    };
+    const add: GraphNode = {
+      id: "Add",
+      expressionClass: "MaterialExpressionAdd",
+      kind: "expression",
+      properties: new Map(),
+      pins: [
+        {
+          id: "AddA",
+          name: "A",
+          direction: "input",
+          links: [{ nodeId: "Convert", pinId: "ConvertOut" }],
+        },
+        {
+          id: "AddB",
+          name: "B",
+          direction: "input",
+          links: [{ nodeId: "Convert", pinId: "ConvertOut" }],
+        },
+        { id: "AddOut", name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    };
+    const output: GraphNode = {
+      id: "Output",
+      expressionClass: "MaterialExpressionFunctionOutput",
+      kind: "function-output",
+      properties: new Map([["OutputName", "Result"]]),
+      pins: [],
+      startLine: 1,
+    };
+    const graph: MaterialGraph = {
+      nodes: new Map([source, convert, add, output].map((item) => [item.id, item])),
+      outputs: [{
+        id: "Output:Input",
+        label: "Result",
+        ownerNodeId: "Output",
+        ownerPinId: "OutputIn",
+        sourceNodeId: "Add",
+        sourcePinId: "AddOut",
+      }],
+      diagnostics: [],
+    };
+
+    const result = generatePseudoHlsl(graph, graph.outputs[0].id);
+    expect(result.code).toContain("float Result = (WorkingNorm.g + WorkingNorm.g);");
+    expect(result.code).not.toContain("float convert");
+  });
+
+  it("renders every Convert output from component mappings and serialized input defaults", () => {
+    const shared: GraphNode = {
+      id: "Shared",
+      expressionClass: "MaterialExpressionFunctionInput",
+      kind: "function-input",
+      properties: new Map([["InputType", "FunctionInput_Scalar"]]),
+      pins: [{ id: "SharedOut", name: "Output", direction: "output", links: [] }],
+      startLine: 1,
+      displayName: "Shared",
+    };
+    const convert: GraphNode = {
+      id: "Convert",
+      expressionClass: "MaterialExpressionConvert",
+      kind: "expression",
+      properties: new Map([
+        ["ConvertInputs(0)", "(DefaultValue=(R=5.000000))"],
+        ["ConvertInputs(1)", "(DefaultValue=(R=123.000000))"],
+        ["ConvertInputs(2)", "()"],
+        ["ConvertInputs(3)", "()"],
+        ["ConvertOutputs(0)", "(Type=Vector2)"],
+        ["ConvertOutputs(1)", "(Type=Vector2)"],
+        ["ConvertOutputs(2)", "(Type=Vector2)"],
+        ["ConvertMappings(1)", "(InputIndex=3,OutputComponentIndex=1)"],
+        ["ConvertMappings(2)", "(InputIndex=1,OutputIndex=1)"],
+        ["ConvertMappings(3)", "(InputIndex=3,OutputIndex=1,OutputComponentIndex=1)"],
+        ["ConvertMappings(4)", "(InputIndex=2,OutputIndex=2)"],
+        ["ConvertMappings(5)", "(InputIndex=3,OutputIndex=2,OutputComponentIndex=1)"],
+      ]),
+      pins: [
+        ...["Input", "Input2", "Input3"].map((name) => ({
+          id: `${name}Pin`,
+          name,
+          direction: "input" as const,
+          links: [],
+        })),
+        {
+          id: "Input4Pin",
+          name: "Input4",
+          direction: "input",
+          links: [{ nodeId: "Shared", pinId: "SharedOut" }],
+        },
+        ...["Output", "Output2", "Output3"].map((name) => ({
+          id: `${name}Pin`,
+          name,
+          direction: "output" as const,
+          links: [],
+        })),
+      ],
+      startLine: 1,
+    };
+    const outputNodes = ["First", "Second", "Third"].map((name): GraphNode => ({
+      id: name,
+      expressionClass: "MaterialExpressionFunctionOutput",
+      kind: "function-output",
+      properties: new Map([["OutputName", name]]),
+      pins: [],
+      startLine: 1,
+    }));
+    const graph: MaterialGraph = {
+      nodes: new Map([shared, convert, ...outputNodes].map((item) => [item.id, item])),
+      outputs: outputNodes.map((output, index) => ({
+        id: `${output.id}:Input`,
+        label: output.id,
+        ownerNodeId: output.id,
+        ownerPinId: `${output.id}In`,
+        sourceNodeId: "Convert",
+        sourcePinId: `${["Output", "Output2", "Output3"][index]}Pin`,
+      })),
+      diagnostics: [],
+    };
+
+    const result = generateAllPseudoHlsl(graph);
+    expect(result.code).toContain("float2 First = float2(5.0, Shared);");
+    expect(result.code).toContain("float2 Second = float2(123.0, Shared);");
+    expect(result.code).toContain("float2 Third = float2(0.0, Shared);");
+    expect(result.code).not.toContain("external_Convert");
+  });
+
   sampleIt("keeps missing partial-graph dependencies explicit", () => {
     const source = readFileSync(
       resolve("samples/SceneColor/SceneColor_partial_1_clipboard.txt"),
@@ -304,7 +517,7 @@ End Object`;
     );
     expect(result.code).toContain("float3 localPosition = LocalPosition();");
     expect(result.code).toContain("length(Transform(float3(1.0, 0.0, 0.0), Instance, World))");
-    expect(result.code).toContain("float3 MeshVecScale = Convert(");
+    expect(result.code).toContain("float3 MeshVecScale = float3(");
     expect(result.code).not.toContain("MeshVecScale = maintain_scale");
     expect(result.code).not.toContain("WARNING: MaterialExpressionPreSkinnedNormal");
     expect(result.code).not.toContain("WARNING: MaterialExpressionVertexInterpolator");

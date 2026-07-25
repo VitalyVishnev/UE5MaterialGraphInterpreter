@@ -202,7 +202,7 @@ Likely cause:
 The original regression suite intentionally grew around real project graphs, while those graphs are now excluded from public distribution due to unverified provenance.
 
 Current workaround:
-Each fixture-dependent test uses `sampleIt`, which becomes `it.skip` only when `samples/` is absent. Public CI remains green without claiming that skipped private-fixture scenarios ran; local development retains all 290 tests. A future redistributable synthetic corpus can replace the skipped coverage.
+Each fixture-dependent test uses `sampleIt`, which becomes `it.skip` only when `samples/` is absent. Public CI remains green without claiming that skipped private-fixture scenarios ran; local development retains the full suite. A future redistributable synthetic corpus can replace the skipped coverage.
 
 Do not repeat:
 Do not delete the local regression scenarios or silently report the public subset as complete fixture coverage.

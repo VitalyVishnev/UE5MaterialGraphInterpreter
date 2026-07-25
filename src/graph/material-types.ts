@@ -88,6 +88,14 @@ export function promoteNumericTypes(a: NumericType, b: NumericType): NumericType
   return undefined;
 }
 
+export function mergeMaterialTypes(
+  a: MaterialType,
+  b: MaterialType,
+): MaterialType | undefined {
+  if (a === b) return a;
+  return isNumericType(a) && isNumericType(b) ? promoteNumericTypes(a, b) : undefined;
+}
+
 export function castNumericFamily(type: NumericType, family: NumericFamily): NumericType {
   return numericType(numericDimensions(type), family)!;
 }

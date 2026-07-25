@@ -287,3 +287,34 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Preserved helper-local editable symbols and applied Name Overrides while rendering helper definitions.
 - Scoped code-panel metadata by generated line range so identical identifiers in separate functions cannot steal each other's type or rename controls.
 - Added regression coverage for generic inline type overrides and helper-local renaming.
+
+## 2026-07-25 - Component-aware Convert expressions
+
+- Replaced opaque `Convert(...)` rendering with one shared sparse-layout decoder for input/output types, defaults, and component mappings.
+- Added direct identity, swizzle, scalar, and vector-constructor rendering for every selected output of a Convert node.
+- Added regressions for Vector2 channel swapping and a four-input, three-output Convert with disconnected serialized defaults.
+
+## 2026-07-25 - Trivial component projections stay inline
+
+- Stopped repeated scalar Convert projections such as `workingNorm.g` from creating generated `convert_N` aliases.
+- Preserved declarations when graph-authored naming or a manual Name Override gives the projected value independent meaning.
+
+## 2026-07-25 - Definition type propagation and TransformPosition
+
+- Made finite unconnected Math defaults participate in the shared type solver, fixing scalar output facts lost only when a graph was loaded as a Material Function definition.
+- Added `TransformPosition` input/output contracts and readable position-space rendering, including Periodic World Tile Size when connected.
+- Verified the supplied `Unsigned` output as `float` and `Max Axis Period` as `float3`.
+
+## 2026-07-25 - Stable multi-output function mapping
+
+- Matched loaded Material Function outputs to call pins by stable `FunctionOutput.Id` instead of Function Output node order.
+- Removed the invalid same-width constraint from Dot Product operands; scalar broadcast now preserves vector inputs and downstream vector results.
+- Verified the supplied `MF_Coordinate_Biplanar.Blend` as confirmed `float2` in the parent workspace.
+- Made readable helper outputs assign directly to their `out` parameters without shadow declarations or `Blend = Blend`-style copies.
+
+## 2026-07-25 - Stable function inputs and honest branch merging
+
+- Centralized Material Function signatures and ordered helper parameters, call arguments, validation, and inline bindings by stable Unreal IDs.
+- Removed order-dependent branch typing that silently selected the first incompatible vector width.
+- Confirmed Epic's scalar-broadcast and unequal-vector incompatibility rules; incomplete runtime branches now remain inferred.
+- Kept compile-time platform/quality permutations honest when their branch widths differ, while selected Static Switches use only the active branch.

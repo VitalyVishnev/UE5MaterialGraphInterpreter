@@ -80,6 +80,35 @@ function unresolvedDefinitionClipboard(): string {
   ].join("\n");
 }
 
+function defaultedArithmeticDefinitionClipboard(): string {
+  return [
+    'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Constant"',
+    'Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="ConstantExpression"',
+    "End Object", 'Begin Object Name="ConstantExpression"', "R=2.0", "End Object",
+    'CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC,PinName="Output",Direction="EGPD_Output",LinkedTo=(Multiply DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD))',
+    "End Object",
+    'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Multiply"',
+    'Begin Object Class=/Script/Engine.MaterialExpressionMultiply Name="MultiplyExpression"',
+    "End Object", 'Begin Object Name="MultiplyExpression"', "ConstB=0.5", "End Object",
+    'CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD,PinName="A",LinkedTo=(Constant CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC))',
+    'CustomProperties Pin (PinId=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE,PinName="B",DefaultValue="0.5")',
+    'CustomProperties Pin (PinId=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,PinName="Output",Direction="EGPD_Output",LinkedTo=(Frac 12121212121212121212121212121212))',
+    "End Object",
+    'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Frac"',
+    'Begin Object Class=/Script/Engine.MaterialExpressionFrac Name="FracExpression"',
+    "End Object", 'Begin Object Name="FracExpression"', "End Object",
+    'CustomProperties Pin (PinId=12121212121212121212121212121212,PinName="Input",LinkedTo=(Multiply FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))',
+    'CustomProperties Pin (PinId=13131313131313131313131313131313,PinName="Output",Direction="EGPD_Output",LinkedTo=(FunctionOutput DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD))',
+    "End Object",
+    'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="FunctionOutput"',
+    'Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="FunctionOutputExpression"',
+    "End Object", 'Begin Object Name="FunctionOutputExpression"',
+    'OutputName="Value"', `Id=${OUTPUT_ID}`, "End Object",
+    'CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD,PinName="Input",LinkedTo=(Frac 13131313131313131313131313131313))',
+    "End Object",
+  ].join("\n");
+}
+
 function forwardingDefinition(): string {
   return [
     'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="NestedCall"',
@@ -126,6 +155,16 @@ describe("Function Definition Library", () => {
     expect(result.code).toContain("// Material Function definitions");
     expect(result.code).toContain("float MF_Value()");
     expect(result.code).toContain("return");
+  });
+
+  it("propagates a numeric type through unconnected arithmetic defaults", () => {
+    const result = createAnalysisWorkspace(
+      rootClipboard(),
+      new Map([[TARGET, defaultedArithmeticDefinitionClipboard()]]),
+    ).analyze();
+
+    expect(result.code).toContain("float MF_Value()");
+    expect(result.code).not.toContain("?type MF_Value");
   });
 
   it("rejects a definition whose stable output ID differs", () => {
@@ -298,8 +337,8 @@ describe("Function Definition Library", () => {
       ]),
     ].join("\n");
     const definition = [
-      ...[["A", outputA, "1.0", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC1", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD1"],
-        ["B", outputB, "2.0", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC2", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2"]]
+      ...[["B", outputB, "2.0", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC2", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2"],
+        ["A", outputA, "1.0", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC1", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD1"]]
         .flatMap(([name, id, value, constantPin, outputPin], index) => [
           `Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="C${index}"`,
           `Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="CE${index}"`,
@@ -323,6 +362,9 @@ describe("Function Definition Library", () => {
     const workspace = createAnalysisWorkspace(root, new Map([[target, definition]]));
 
     expect(workspace.analyze().code).toContain("void MF_Two(out float A, out float B)");
+    expect(workspace.analyze().code).toContain("A = 1.0;");
+    expect(workspace.analyze().code).not.toContain("float A = 1.0;");
+    expect(workspace.analyze().code).not.toContain("A = A;");
     const strict = workspace.analyze({
       formatting: {
         bundleFormat: "strict",
@@ -335,6 +377,76 @@ describe("Function Definition Library", () => {
     }).code;
     expect(strict).toContain("struct MF_TwoOutputs");
     expect(strict).toContain("MF_TwoOutputs MF_Two()");
+  });
+
+  it("orders helper parameters and call arguments by stable input IDs", () => {
+    const target = "MaterialFunction'\"/Project/MF_Inputs.MF_Inputs\"'";
+    const scalarId = "11111111111111111111111111111111";
+    const vectorId = "22222222222222222222222222222222";
+    const outputId = "33333333333333333333333333333333";
+    const root = [
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Scalar"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="ScalarExpression"',
+      "End Object", 'Begin Object Name="ScalarExpression"', "R=2.0", "End Object",
+      'CustomProperties Pin (PinId=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1,PinName="Output",Direction="EGPD_Output",LinkedTo=(Call BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB2))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Vector"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionConstant3Vector Name="VectorExpression"',
+      "End Object", 'Begin Object Name="VectorExpression"', "Constant=(R=1.0,G=2.0,B=3.0)", "End Object",
+      'CustomProperties Pin (PinId=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2,PinName="Output",Direction="EGPD_Output",LinkedTo=(Call BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB1))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Call"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionMaterialFunctionCall Name="CallExpression"',
+      "End Object", 'Begin Object Name="CallExpression"',
+      `MaterialFunction=${target}`,
+      `FunctionInputs(0)=(ExpressionInputId=${scalarId},Input=(InputName="Scalar"))`,
+      `FunctionInputs(1)=(ExpressionInputId=${vectorId},Input=(InputName="Vector"))`,
+      `FunctionOutputs(0)=(ExpressionOutputId=${outputId},Output=(OutputName="Value"))`,
+      "End Object",
+      'CustomProperties Pin (PinId=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB1,PinName="Vector",LinkedTo=(Vector AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2))',
+      'CustomProperties Pin (PinId=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB2,PinName="Scalar",LinkedTo=(Scalar AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1))',
+      'CustomProperties Pin (PinId=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB3,PinName="Value",Direction="EGPD_Output",LinkedTo=(Output CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Output"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="OutputExpression"',
+      "End Object", 'Begin Object Name="OutputExpression"', 'OutputName="Result"',
+      "Id=44444444444444444444444444444444", "End Object",
+      'CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC,PinName="Input",LinkedTo=(Call BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB3))',
+      "End Object",
+    ].join("\n");
+    const definition = [
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="VectorInput"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionFunctionInput Name="VectorInputExpression"',
+      "End Object", 'Begin Object Name="VectorInputExpression"', 'InputName="Vector"',
+      `Id=${vectorId}`, "End Object",
+      'CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD1,PinName="Output",Direction="EGPD_Output",LinkedTo=(Add EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE1))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="ScalarInput"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionFunctionInput Name="ScalarInputExpression"',
+      "End Object", 'Begin Object Name="ScalarInputExpression"', 'InputName="Scalar"',
+      `Id=${scalarId}`, "InputType=FunctionInput_Scalar", "End Object",
+      'CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2,PinName="Output",Direction="EGPD_Output",LinkedTo=(Add EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE2))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Add"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionAdd Name="AddExpression"',
+      "End Object", 'Begin Object Name="AddExpression"', "End Object",
+      'CustomProperties Pin (PinId=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE1,PinName="A",LinkedTo=(VectorInput DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD1))',
+      'CustomProperties Pin (PinId=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE2,PinName="B",LinkedTo=(ScalarInput DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2))',
+      'CustomProperties Pin (PinId=EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE3,PinName="Output",Direction="EGPD_Output",LinkedTo=(FunctionOutput FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="FunctionOutput"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="FunctionOutputExpression"',
+      "End Object", 'Begin Object Name="FunctionOutputExpression"', 'OutputName="Value"',
+      `Id=${outputId}`, "End Object",
+      'CustomProperties Pin (PinId=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,PinName="Input",LinkedTo=(Add EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE3))',
+      "End Object",
+    ].join("\n");
+
+    const code = createAnalysisWorkspace(root, new Map([[target, definition]])).analyze().code;
+
+    expect(code).toContain("float3 MF_Inputs(float Scalar, float3 Vector)");
+    expect(code).toContain("MF_Inputs(2.0, float3(1.0, 2.0, 3.0))");
+    expect(code).not.toContain("MF_Inputs(float3 Vector, float Scalar)");
   });
 
   it("offers All outputs for a multi-input Material Root", () => {

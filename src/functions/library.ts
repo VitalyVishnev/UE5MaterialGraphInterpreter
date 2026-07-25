@@ -6,6 +6,12 @@ import { resolveGraph } from "../graph/resolve";
 import { sliceOutputs, type StaticSwitchControl } from "../graph/slice";
 import type { GraphLink, GraphNode, GraphOutput, GraphPin, MaterialGraph } from "../graph/types";
 import { functionOutputId, materialFunctionName, type FunctionGenerationKnowledge } from "../pseudo-hlsl/generate";
+import {
+  callFunctionSignature,
+  definitionFunctionSignature,
+  type FunctionSignature,
+  type FunctionSignatureValue,
+} from "./signature";
 
 export type FunctionExpansionMode = "types" | "helpers" | "inline";
 
@@ -36,16 +42,7 @@ export interface FunctionExpansion {
   diagnostics: Diagnostic[];
 }
 
-interface SignatureValue {
-  id: string;
-  name: string;
-  index: number;
-}
-
-export interface FunctionSignature {
-  inputs: SignatureValue[];
-  outputs: SignatureValue[];
-}
+export type { FunctionSignature } from "./signature";
 
 interface Definition {
   target: string;
@@ -82,50 +79,6 @@ const INLINE_NODE_WARNING = 10_000;
 const inputPins = (node: GraphNode): GraphPin[] => node.pins.filter((pin) => pin.direction === "input");
 const outputPins = (node: GraphNode): GraphPin[] => node.pins.filter((pin) => pin.direction === "output");
 const valueKey = (nodeId: string, pinId: string): string => `${nodeId}:${pinId}`;
-
-function indexedProperties(node: GraphNode, prefix: string): string[] {
-  return [...node.properties]
-    .flatMap(([key, value]) => {
-      const index = key.match(new RegExp(`^${prefix}\\((\\d+)\\)$`))?.[1];
-      return index === undefined ? [] : [{ index: Number(index), value }];
-    })
-    .sort((a, b) => a.index - b.index)
-    .map(({ value }) => value);
-}
-
-function serializedName(value: string, key: string, fallback: string): string {
-  return value.match(new RegExp(`${key}="([^"]*)"`))?.[1]
-    ?? value.match(new RegExp(`${key}=([^,)]+)`))?.[1]
-    ?? fallback;
-}
-
-function callSignature(node: GraphNode): FunctionSignature {
-  const inputsPins = inputPins(node);
-  const outputsPins = outputPins(node);
-  const inputs = indexedProperties(node, "FunctionInputs").map((value, index) => ({
-    id: value.match(/ExpressionInputId=([A-Fa-f0-9]{32})/)?.[1].toUpperCase() ?? "",
-    name: serializedName(value, "InputName", inputsPins[index]?.name ?? `Input ${index + 1}`),
-    index,
-  }));
-  const outputs = indexedProperties(node, "FunctionOutputs").map((value, index) => ({
-    id: value.match(/ExpressionOutputId=([A-Fa-f0-9]{32})/)?.[1].toUpperCase() ?? "",
-    name: serializedName(value, "OutputName", outputsPins[index]?.name ?? `Output ${index + 1}`),
-    index,
-  }));
-  return { inputs, outputs };
-}
-
-function definitionSignature(graph: MaterialGraph): FunctionSignature {
-  const values = (kind: "function-input" | "function-output"): SignatureValue[] =>
-    [...graph.nodes.values()]
-      .filter((node) => node.kind === kind)
-      .map((node, index) => ({
-        id: (node.properties.get("Id") ?? "").toUpperCase(),
-        name: node.displayName ?? (kind === "function-input" ? `Input ${index + 1}` : `Output ${index + 1}`),
-        index,
-      }));
-  return { inputs: values("function-input"), outputs: values("function-output") };
-}
 
 function externalCalls(graph: MaterialGraph): GraphNode[] {
   return [...graph.nodes.values()].filter((node) => node.kind === "external-call");
@@ -172,7 +125,11 @@ function resolveStaticBool(
   return value;
 }
 
-function compareIds(label: string, expected: SignatureValue[], actual: SignatureValue[]): string | undefined {
+function compareIds(
+  label: string,
+  expected: FunctionSignatureValue[],
+  actual: FunctionSignatureValue[],
+): string | undefined {
   const expectedIds = new Set(expected.map(({ id }) => id).filter(Boolean));
   const actualIds = new Set(actual.map(({ id }) => id).filter(Boolean));
   if (expectedIds.size !== expected.length || actualIds.size !== actual.length) {
@@ -199,7 +156,7 @@ function validateDefinition(definition: Definition, calls: GraphNode[]): string 
     return "Every Material Function Output must be connected in the pasted definition.";
   }
   for (const call of calls) {
-    const expected = callSignature(call);
+    const expected = callFunctionSignature(call);
     const inputError = compareIds("Inputs", expected.inputs, definition.signature.inputs);
     const outputError = compareIds("Outputs", expected.outputs, definition.signature.outputs);
     if (inputError || outputError) return [inputError, outputError].filter(Boolean).join(" ");
@@ -216,6 +173,16 @@ function definitionOutput(
     return owner?.kind === "function-output"
       && owner.properties.get("Id")?.toUpperCase() === outputId.toUpperCase();
   });
+}
+
+function orderedDefinitionGraph(definition: Definition): MaterialGraph {
+  const outputs = definition.expectedSignature.outputs.flatMap(({ id }) => {
+    const output = definitionOutput(definition, id);
+    return output ? [output] : [];
+  });
+  return outputs.length === definition.graph.outputs.length
+    ? { ...definition.graph, outputs }
+    : definition.graph;
 }
 
 function seedFacts(
@@ -312,7 +279,7 @@ function inlineCall(
       .filter((node) => !excluded.has(node.id))
       .map((node) => [node.id, `${prefix}${node.id}`]),
   );
-  const callInputs = callSignature(call).inputs;
+  const callInputs = callFunctionSignature(call).inputs;
   const inputSources = new Map<string, GraphLink>();
 
   for (const inputNode of expandedDefinition.nodes.values()) {
@@ -371,7 +338,7 @@ function inlineCall(
   }
 
   const proxyInputs: GraphPin[] = [];
-  const signature = callSignature(call);
+  const signature = callFunctionSignature(call);
   for (const [index, outputPin] of outputPins(call).entries()) {
     const signatureOutput = signature.outputs[index];
     const graphOutput = signatureOutput
@@ -421,8 +388,8 @@ export function compileFunctionLibrary(
       const definition: Definition = {
         target,
         graph: definitionGraph,
-        signature: definitionSignature(definitionGraph),
-        expectedSignature: callSignature(call),
+        signature: definitionFunctionSignature(definitionGraph),
+        expectedSignature: callFunctionSignature(call),
         valid: false,
       };
       parsedDefinitions.set(target, definition);
@@ -435,7 +402,7 @@ export function compileFunctionLibrary(
 
   for (const definition of parsedDefinitions.values()) {
     const firstCall = callsByTarget.get(definition.target)?.[0];
-    if (firstCall) definition.expectedSignature = callSignature(firstCall);
+    if (firstCall) definition.expectedSignature = callFunctionSignature(firstCall);
     const error = validateDefinition(definition, callsByTarget.get(definition.target) ?? []);
     definition.valid = !error;
     definition.error = error;
@@ -475,7 +442,7 @@ export function compileFunctionLibrary(
     const occurrences = occurrencesByTarget.get(target) ?? [];
     const groups = new Map<string, CallOccurrence[]>();
     for (const occurrence of occurrences) {
-      const signature = callSignature(occurrence.node);
+      const signature = callFunctionSignature(occurrence.node);
       const configuration = inputControls.map(({ inputId }) => {
         const input = signature.inputs.find((candidate) => candidate.id === inputId);
         const inputPin = input ? inputPins(occurrence.node)[input.index] : undefined;
@@ -492,7 +459,9 @@ export function compileFunctionLibrary(
         const id = `${target}::group:${groupIndex + 1}::function-input:${inputId}`;
         groupedSwitchAliases.set(id, directIds);
         const first = group[0];
-        const signature = first ? callSignature(first.node).inputs.find((input) => input.id === inputId) : undefined;
+        const signature = first
+          ? callFunctionSignature(first.node).inputs.find((input) => input.id === inputId)
+          : undefined;
         const inputPin = first && signature ? inputPins(first.node)[signature.index] : undefined;
         const value = first
           ? serializedBool(inputPin?.defaultValue) ?? resolveStaticBool(first.graph, inputPin?.links[0])
@@ -520,7 +489,9 @@ export function compileFunctionLibrary(
         const cycle = ancestors.has(target);
         const shared = seen.has(target);
         seen.add(target);
-        const expected = callSignature((callsByTarget.get(target) ?? [])[0] ?? externalCalls(graph)[0]);
+        const expected = callFunctionSignature(
+          (callsByTarget.get(target) ?? [])[0] ?? externalCalls(graph)[0],
+        );
         let staticSwitches: StaticSwitchControl[] = [];
         if (valid && definition.graph.outputs.length) {
           staticSwitches = definitionSwitches(target, definition);
@@ -635,8 +606,11 @@ export function compileFunctionLibrary(
     knowledge,
     definitions: new Map(sources),
     tree,
-    graph: (target) => validDefinitions.get(target)?.graph,
-    signature: (target) => validDefinitions.get(target)?.signature,
+    graph: (target) => {
+      const definition = validDefinitions.get(target);
+      return definition ? orderedDefinitionGraph(definition) : undefined;
+    },
+    signature: (target) => validDefinitions.get(target)?.expectedSignature,
     mode,
     resolveStaticSwitchOverrides: (overrides) => {
       for (const [target, definition] of validDefinitions) definitionSwitches(target, definition);

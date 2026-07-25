@@ -2,6 +2,7 @@ import type { Diagnostic } from "../clipboard/raw-types";
 import {
   declaredFunctionInputType,
   isNumericType,
+  mergeMaterialTypes,
   numericDimensions,
   numericFamily,
   numericType,
@@ -17,6 +18,7 @@ import {
   equivalentExpressionInputs,
   fixedExpressionInputType,
   fixedExpressionOutputType,
+  mathInputDefault,
   mathInputNames,
   mathExpression,
 } from "./expression-semantics";
@@ -116,6 +118,17 @@ export function inferTypes(
       return true;
     }
     if (current.type !== type) {
+      const scalarBroadcast =
+        isNumericType(current.type)
+        && isNumericType(type)
+        && numericDimensions(current.type) !== numericDimensions(type);
+      if (scalarBroadcast && current.type === "float" && current.confidence === "confirmed"
+        && confidence === "inferred") return false;
+      if (scalarBroadcast && type === "float" && confidence === "confirmed"
+        && current.confidence === "inferred") {
+        facts.set(valueKey, { type, confidence });
+        return true;
+      }
       facts.delete(valueKey);
       conflicts.add(valueKey);
       return true;
@@ -125,6 +138,14 @@ export function inferTypes(
       return true;
     }
     return false;
+  };
+
+  const setConflict = (valueKey: string | undefined): boolean => {
+    if (!valueKey || conflicts.has(valueKey)) return false;
+    facts.delete(valueKey);
+    minimums.delete(valueKey);
+    conflicts.add(valueKey);
+    return true;
   };
 
   for (const [valueKey, type] of overrides) {
@@ -168,6 +189,19 @@ export function inferTypes(
   const linkedMathKey = (node: GraphNode, inputName: string): string | undefined => {
     const semantics = mathExpression(node.expressionClass);
     return linkedKey(node, ...(semantics ? mathInputNames(semantics, inputName) : [inputName]));
+  };
+  const mathInputFact = (node: GraphNode, inputName: string): InferredType | undefined => {
+    const semantics = mathExpression(node.expressionClass);
+    const names = semantics ? mathInputNames(semantics, inputName) : [inputName];
+    const pin = inputPins(node).find((candidate) =>
+      names.some((name) => name.toLowerCase() === candidate.name.toLowerCase()));
+    const link = pin?.links[0];
+    if (link) return facts.get(key(link.nodeId, link.pinId));
+    const property = semantics ? mathInputDefault(semantics, inputName) : undefined;
+    const value = pin?.defaultValue ?? (property ? node.properties.get(property) : undefined);
+    return value !== undefined && Number.isFinite(Number(value))
+      ? { type: "float", confidence: "confirmed" }
+      : undefined;
   };
 
   for (const node of orderedNodes) {
@@ -276,31 +310,42 @@ export function inferTypes(
         }
       }
 
-      const branchFacts = branchExpressionInputs(node)
-        .map((name) => facts.get(linkedKey(node, name) ?? ""))
-        .filter((fact): fact is InferredType => Boolean(fact));
-      if (out && branchFacts.length > 0) {
-        const types = branchFacts.map((fact) => fact.type);
-        const branchType = types.every(isNumericType)
-          ? types.reduce((left, right) => promoteNumericTypes(left, right) ?? left)
-          : types.every((type) => type === types[0])
-            ? types[0]
+      const selectedStaticBranch = slice.staticSwitchSelections.get(node.id);
+      const branchNames = selectedStaticBranch === undefined
+        ? branchExpressionInputs(node)
+        : [selectedStaticBranch ? "True" : "False"];
+      const branchFacts = branchNames.map((name) => mathInputFact(node, name));
+      const knownBranchFacts = branchFacts.filter((fact): fact is InferredType => Boolean(fact));
+      if (out && knownBranchFacts.length > 0) {
+        const runtimeSelection = node.expressionClass === "MaterialExpressionIf"
+          || node.expressionClass === "MaterialExpressionSwitch";
+        let branchType: MaterialType | undefined = knownBranchFacts[0].type;
+        for (const fact of knownBranchFacts.slice(1)) {
+          branchType = branchType
+            ? runtimeSelection
+              ? mergeMaterialTypes(branchType, fact.type)
+              : branchType === fact.type ? branchType : undefined
             : undefined;
-        const current = facts.get(out);
-        if (branchType && current?.type !== branchType) {
-          if (current?.confidence === "inferred"
-            && isNumericType(current.type)
-            && isNumericType(branchType)) {
-            facts.set(out, {
-              type: promoteNumericTypes(current.type, branchType) ?? current.type,
-              confidence: "inferred",
-            });
+          if (!branchType) break;
+        }
+        if (!branchType && runtimeSelection) {
+          changed = setConflict(out) || changed;
+        } else if (branchType) {
+          const complete = branchFacts.every(Boolean);
+          const confidence = complete
+            && knownBranchFacts.every((fact) => fact.confidence === "confirmed")
+            ? "confirmed"
+            : "inferred";
+          const current = facts.get(out);
+          if (!current) {
+            changed = set(out, branchType, confidence) || changed;
+          } else if (current.type === branchType) {
+            changed = set(out, branchType, confidence) || changed;
+          } else if (current.confidence === "inferred") {
+            facts.set(out, { type: branchType, confidence });
             changed = true;
           } else {
-            const confidence = branchFacts.some((fact) => fact.confidence === "inferred")
-              ? "inferred"
-              : "confirmed";
-            changed = set(out, branchType, confidence) || changed;
+            changed = setConflict(out) || changed;
           }
         }
       }
@@ -340,8 +385,8 @@ export function inferTypes(
         const names = arithmeticInputs;
         const aKey = linkedMathKey(node, names[0]);
         const bKey = linkedMathKey(node, names[1]);
-        const a = aKey ? facts.get(aKey) : undefined;
-        const b = bKey ? facts.get(bKey) : undefined;
+        const a = mathInputFact(node, names[0]);
+        const b = mathInputFact(node, names[1]);
         const result = facts.get(out);
         const aType = a && isNumericType(a.type) ? a.type : undefined;
         const bType = b && isNumericType(b.type) ? b.type : undefined;
@@ -363,15 +408,6 @@ export function inferTypes(
         } else if (resultType && bType === "float") {
           changed = set(aKey, resultType, "inferred") || changed;
         }
-      }
-
-      if (node.expressionClass === "MaterialExpressionDotProduct") {
-        const aKey = linkedKey(node, "A");
-        const bKey = linkedKey(node, "B");
-        const a = aKey ? facts.get(aKey) : undefined;
-        const b = bKey ? facts.get(bKey) : undefined;
-        changed = set(aKey, b && isNumericType(b.type) ? b.type : undefined, "inferred") || changed;
-        changed = set(bKey, a && isNumericType(a.type) ? a.type : undefined, "inferred") || changed;
       }
 
       if (node.expressionClass === "MaterialExpressionAppendVector" && out) {

@@ -1,6 +1,7 @@
 import type { Diagnostic } from "../clipboard/raw-types";
 import {
   advancedExpression,
+  convertExpressionLayout,
   fixedExpressionOutputType,
   inputDataExpression,
   knownMaterialFunctionOutputType,
@@ -14,7 +15,7 @@ import {
   castNumericFamily,
   declaredFunctionInputType,
   isNumericType,
-  promoteNumericTypes,
+  mergeMaterialTypes,
   type MaterialType,
 } from "../graph/material-types";
 import {
@@ -29,6 +30,12 @@ import type {
   GraphPin,
   MaterialGraph,
 } from "../graph/types";
+import { orderedCallInputs } from "../functions/signature";
+
+export interface FunctionInputDeclaration {
+  id: string;
+  declaration: string;
+}
 
 export interface PseudoHlslResult {
   code: string;
@@ -36,6 +43,7 @@ export interface PseudoHlslResult {
   typeOverrideGroups: TypeOverrideGroup[];
   staticSwitches: StaticSwitchControl[];
   editableSymbols: EditableSymbol[];
+  functionInputs: FunctionInputDeclaration[];
 }
 
 export interface FunctionGenerationKnowledge {
@@ -201,17 +209,6 @@ export function functionOutputId(target: string, outputIndex: number): string {
   return `${target}::${outputIndex}`;
 }
 
-function functionInputIds(node: GraphNode): string[] {
-  return [...node.properties]
-    .flatMap(([key, value]) => {
-      const index = key.match(/^FunctionInputs\((\d+)\)$/)?.[1];
-      const id = value.match(/ExpressionInputId=([A-Fa-f0-9]{32})/)?.[1];
-      return index !== undefined && id ? [{ index: Number(index), id: id.toUpperCase() }] : [];
-    })
-    .sort((a, b) => a.index - b.index)
-    .map(({ id }) => id);
-}
-
 function callInputOverrideId(target: string, node: GraphNode, inputId: string): string {
   return `${target}::call:${node.nodeGuid ?? node.id}::function-input:${inputId}`;
 }
@@ -277,9 +274,8 @@ function vectorPin(value: string, pin: GraphPin): Value {
 }
 
 function combinedType(a: Value, b: Value): string {
-  return isNumericType(a.type) && isNumericType(b.type)
-    ? promoteNumericTypes(a.type, b.type) ?? "unknown"
-    : "unknown";
+  if (a.type === "unknown" || b.type === "unknown") return "unknown";
+  return mergeMaterialTypes(a.type as MaterialType, b.type as MaterialType) ?? "unknown";
 }
 
 function numericFamilyCast(type: string, family: "float" | "uint"): string {
@@ -487,11 +483,13 @@ function generatePseudoHlslForOutputs(
     ...slice.diagnostics,
     ...typeInference.diagnostics,
   ];
+  const reportedConvertIssues = new Set<string>();
   const values = new Map<string, Value>();
   const declarations: Declaration[] = [];
   const functionInputSymbols = new Set<string>();
   const usedNames = new Set<string>();
   const editableSymbols = new Map<string, EditableSymbol>();
+  const functionInputs: FunctionInputDeclaration[] = [];
 
   const uniqueName = (preferred: string): string => {
     let candidate = preferred;
@@ -722,22 +720,115 @@ function generatePseudoHlslForOutputs(
         const vertex = input(node, ["VertexShader"]);
         return callValue("ShaderStageSwitch", [pixel.code, vertex.code], combinedType(pixel, vertex));
       }
-      case "MaterialExpressionTransform": {
+      case "MaterialExpressionTransform":
+      case "MaterialExpressionTransformPosition": {
         const value = input(node, ["Input"]);
         const coordinateSpace = (property: string, pinName: string): string | undefined => {
           const raw = node.properties.get(property) ?? pinByName(node, pinName)?.defaultValue;
           return raw
-            ? identifier(raw.replace(/^TRANSFORMSOURCE_|^TRANSFORM_/, "").replace(/\s+Space$/i, ""))
+            ? identifier(raw
+              .replace(/^TRANSFORMPOSSOURCE_|^TRANSFORMSOURCE_|^TRANSFORM_/, "")
+              .replace(/\s+Space$/i, ""))
             : undefined;
         };
         const source = coordinateSpace("TransformSourceType", "Source");
         const destination = coordinateSpace("TransformType", "Destination");
-        const args = [value.code, source, destination].filter((item): item is string => Boolean(item));
-        return callValue("Transform", args, "float3");
+        const periodicTileSize = className === "MaterialExpressionTransformPosition"
+          && (node.properties.get("bUsesPeriodicWorldPosition") === "True"
+            || Boolean(pinByName(node, "Periodic World Tile Size")?.links.length))
+          ? input(node, ["Periodic World Tile Size"]).code
+          : undefined;
+        const args = [value.code, periodicTileSize, source, destination]
+          .filter((item): item is string => Boolean(item));
+        return callValue(
+          className === "MaterialExpressionTransformPosition" ? "TransformPosition" : "Transform",
+          args,
+          "float3",
+        );
       }
       case "MaterialExpressionConvert": {
-        const args = inputPins(node).map((pin) => linkedValue(node, pin).code);
-        return callValue("Convert", args, "unknown");
+        const layout = convertExpressionLayout(node);
+        const inputs = inputPins(node);
+        const outputs = outputPins(node);
+        const outputIndex = outputs.findIndex((pin) => pin.id === sourcePin.id);
+        const output = layout.outputs[outputIndex];
+        if (!output?.type || layout.issues.length > 0) {
+          if (!reportedConvertIssues.has(node.id)) {
+            reportedConvertIssues.add(node.id);
+            diagnostics.push({
+              code: "invalid-convert-layout",
+              severity: "warning",
+              message: `Convert layout could not be decoded: ${layout.issues.join(" ") || "missing output metadata."}`,
+              line: node.startLine,
+              nodeId: node.id,
+            });
+          }
+          return callValue(
+            "Convert",
+            inputs.map((pin) => linkedValue(node, pin).code),
+            output?.type ?? "unknown",
+          );
+        }
+
+        const componentNames = "rgba";
+        const componentCount = output.type === "float" ? 1 : Number(output.type.at(-1));
+        const outputMappings = layout.mappings.filter((mapping) =>
+          mapping.outputIndex === outputIndex);
+        const components = Array.from({ length: componentCount }, (_, componentIndex) => {
+          const mapping = outputMappings.find((candidate) =>
+            candidate.outputComponentIndex === componentIndex);
+          if (!mapping) {
+            return {
+              code: number(String(output.defaultComponents[componentIndex] ?? 0)),
+            };
+          }
+          const inputLayout = layout.inputs[mapping.inputIndex];
+          const inputPin = inputs[mapping.inputIndex];
+          if (!inputLayout?.type || !inputPin) return { code: "0.0" };
+          if (inputPin.links.length === 0) {
+            return {
+              code: number(String(inputLayout.defaultComponents[mapping.inputComponentIndex] ?? 0)),
+              inputIndex: mapping.inputIndex,
+              inputComponentIndex: mapping.inputComponentIndex,
+              connected: false,
+            };
+          }
+          const value = linkedValue(node, inputPin);
+          const width = inputLayout.type === "float" ? 1 : Number(inputLayout.type.at(-1));
+          return {
+            code: width === 1
+              ? value.code
+              : `${/^[A-Za-z_]\w*$/.test(value.code) ? value.code : `(${value.code})`}.${componentNames[mapping.inputComponentIndex]}`,
+            inputIndex: mapping.inputIndex,
+            inputComponentIndex: mapping.inputComponentIndex,
+            connected: true,
+            base: value.code,
+          };
+        });
+
+        if (componentCount === 1) return { code: components[0].code, type: output.type };
+        const first = components[0];
+        if (
+          first.connected
+          && first.base
+          && components.every((component) =>
+            component.connected && component.inputIndex === first.inputIndex)
+        ) {
+          const swizzle = components.map((component) =>
+            componentNames[component.inputComponentIndex ?? 0]).join("");
+          const inputType = layout.inputs[first.inputIndex!]?.type;
+          const inputWidth = inputType === "float" ? 1 : Number(inputType?.at(-1) ?? 0);
+          if (swizzle === componentNames.slice(0, inputWidth) && componentCount === inputWidth) {
+            return { code: first.base, type: output.type };
+          }
+          const base = /^[A-Za-z_]\w*$/.test(first.base) ? first.base : `(${first.base})`;
+          return { code: `${base}.${swizzle}`, type: output.type };
+        }
+        return callValue(
+          output.type,
+          components.map((component) => component.code),
+          output.type,
+        );
       }
       case "MaterialExpressionSceneTexture": {
         const uv = pinByName(node, "UVs")?.links.length ? input(node, ["UVs"]).code : undefined;
@@ -848,9 +939,8 @@ function generatePseudoHlslForOutputs(
       }
       case "MaterialExpressionMaterialFunctionCall": {
         const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
-        const inputIds = functionInputIds(node);
-        const args = inputPins(node).map((pin, index) => {
-          const inputId = inputIds[index];
+        const args = orderedCallInputs(node).map(({ pin, id: inputId }) => {
+          if (!pin) return "unresolved_input";
           const override = inputId
             ? functionKnowledge?.callInputOverrides?.get(callInputOverrideId(target, node, inputId))
             : undefined;
@@ -1128,6 +1218,11 @@ function generatePseudoHlslForOutputs(
       const protectedName = node.kind === "function-input" || /Parameter$/.test(node.expressionClass);
       const commentRegion = protectedName ? undefined : localCommentRegion(node);
       const commentName = authoredIdentifier(commentRegion?.text);
+      const nameOverride = nameOverrides.has(
+        editableSymbolId(node, pin, functionKnowledge?.symbolNamespace),
+      );
+      const trivialComponentProjection =
+        value.type === "float" && /^[A-Za-z_]\w*\.[rgba]$/.test(value.code);
       const redundantRerouteAlias = /MaterialExpression(?:Named)?Reroute(?:Declaration|Usage)?$/.test(node.expressionClass)
         && (absorbedReroutes.has(node.id) || !authored || authored === value.code)
         && /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?$/.test(value.code);
@@ -1137,8 +1232,9 @@ function generatePseudoHlslForOutputs(
           /Parameter$/.test(node.expressionClass) ||
           Boolean(authored) ||
           Boolean(commentRegion) ||
+          nameOverride ||
           Boolean(value.opaque) ||
-          (useCounts.get(key) ?? 0) > 1 ||
+          (useCounts.get(key) ?? 0) > 1 && !trivialComponentProjection ||
           value.code.length > maxInlineExpressionLength
         );
 
@@ -1161,10 +1257,11 @@ function generatePseudoHlslForOutputs(
       registerSymbol(node, pin, name, value);
       const preamble = node.kind === "function-input" || functionInputSymbols.has(value.code);
       values.set(key, { code: name, type: value.type, confidence: value.confidence });
+      const code = node.kind === "function-input"
+        ? `${renderedType(value)} ${name}; // Function input`
+        : assignment(renderedType(value), name, value, options.multilineCalls);
       declarations.push({
-        code: node.kind === "function-input"
-          ? `${renderedType(value)} ${name}; // Function input`
-          : assignment(renderedType(value), name, value, options.multilineCalls),
+        code,
         commentRegions: preamble || !options.commentSections ? undefined : node.commentRegions,
         namedByCommentRegionId: !terminalName && !authored && commentName
           ? commentRegion?.id
@@ -1174,7 +1271,13 @@ function generatePseudoHlslForOutputs(
           isComplexValue(value) || options.expandCustomNodes && node.kind === "custom"
         ),
       });
-      if (node.kind === "function-input") functionInputSymbols.add(name);
+      if (node.kind === "function-input") {
+        functionInputSymbols.add(name);
+        functionInputs.push({
+          id: (node.properties.get("Id") ?? "").toUpperCase(),
+          declaration: code.replace(/;\s*\/\/ Function input$/, ""),
+        });
+      }
     }
   }
 
@@ -1333,6 +1436,7 @@ function generatePseudoHlslForOutputs(
     typeOverrideGroups,
     staticSwitches: slice.staticSwitches,
     editableSymbols: [...editableSymbols.values()],
+    functionInputs,
   };
 }
 

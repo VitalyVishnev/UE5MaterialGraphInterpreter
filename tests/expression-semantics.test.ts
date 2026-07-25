@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   advancedExpressionSemantics,
+  convertExpressionLayout,
   equivalentExpressionInputs,
+  fixedExpressionInputType,
   fixedExpressionOutputType,
   inputDataExpressionSemantics,
   knownMaterialFunctionOutputType,
@@ -18,6 +20,13 @@ const output = (name: string, id = name): GraphPin => ({
   id,
   name,
   direction: "output",
+  links: [],
+});
+
+const input = (name: string, id = name): GraphPin => ({
+  id,
+  name,
+  direction: "input",
   links: [],
 });
 
@@ -329,6 +338,39 @@ describe("built-in Material Expression semantics", () => {
       .toBe(expected);
   });
 
+  it("types and renders TransformPosition as a float3 operation", () => {
+    const inputPin = input("Input");
+    const tileSizePin = input("Periodic World Tile Size");
+    const resultPin = output("Output");
+    const transform = node(
+      "MaterialExpressionTransformPosition",
+      [inputPin, tileSizePin, resultPin],
+      new Map([
+        ["TransformSourceType", "TRANSFORMPOSSOURCE_TranslatedWorld"],
+        ["TransformType", "TRANSFORMPOSSOURCE_PeriodicWorld"],
+      ]),
+    );
+
+    expect(fixedExpressionInputType(transform, inputPin)).toBe("float3");
+    expect(fixedExpressionInputType(transform, tileSizePin)).toBe("float");
+    expect(fixedExpressionOutputType(transform, resultPin)).toBe("float3");
+
+    const source = [
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="TransformPosition"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionTransformPosition Name="Expression_0"',
+      "End Object", 'Begin Object Name="Expression_0"',
+      "TransformSourceType=TRANSFORMPOSSOURCE_TranslatedWorld",
+      "TransformType=TRANSFORMPOSSOURCE_PeriodicWorld", "End Object",
+      'CustomProperties Pin (PinId=00000000000000000000000000000001,PinName="Input",DefaultValue="0.0")',
+      'CustomProperties Pin (PinId=00000000000000000000000000000002,PinName="Periodic World Tile Size",DefaultValue="4096.0")',
+      'CustomProperties Pin (PinId=00000000000000000000000000000003,PinName="Output",Direction="EGPD_Output")',
+      "End Object",
+    ].join("\n");
+    const result = analyzeClipboard(source);
+    expect(result.code).toContain("float3 TransformPosition = TransformPosition(");
+    expect(result.diagnostics.some((item) => item.code === "unsupported-node")).toBe(false);
+  });
+
   it("reads dynamic Convert output types from clipboard metadata", () => {
     const pin = output("Output");
     const convert = node(
@@ -337,6 +379,52 @@ describe("built-in Material Expression semantics", () => {
       new Map([["ConvertOutputs(0)", "(Type=Vector3)"]]),
     );
     expect(fixedExpressionOutputType(convert, pin)).toBe("float3");
+  });
+
+  it("decodes sparse multi-input and multi-output Convert metadata", () => {
+    const inputs = ["Input", "Input2", "Input3", "Input4"].map((name) => input(name));
+    const outputs = ["Output", "Output2", "Output3"].map((name) => output(name));
+    const convert = node(
+      "MaterialExpressionConvert",
+      [...inputs, ...outputs],
+      new Map([
+        ["ConvertInputs(0)", "(DefaultValue=(R=5.000000))"],
+        ["ConvertInputs(1)", "(DefaultValue=(R=123.000000))"],
+        ["ConvertInputs(2)", "()"],
+        ["ConvertInputs(3)", "()"],
+        ["ConvertOutputs(0)", "(Type=Vector2)"],
+        ["ConvertOutputs(1)", "(Type=Vector2)"],
+        ["ConvertOutputs(2)", "(Type=Vector2)"],
+        ["ConvertMappings(1)", "(InputIndex=3,OutputComponentIndex=1)"],
+        ["ConvertMappings(2)", "(InputIndex=1,OutputIndex=1)"],
+        ["ConvertMappings(3)", "(InputIndex=3,OutputIndex=1,OutputComponentIndex=1)"],
+        ["ConvertMappings(4)", "(InputIndex=2,OutputIndex=2)"],
+        ["ConvertMappings(5)", "(InputIndex=3,OutputIndex=2,OutputComponentIndex=1)"],
+      ]),
+    );
+
+    const layout = convertExpressionLayout(convert);
+    expect(layout.inputs.map(({ type, defaultComponents }) => ({ type, defaultComponents })))
+      .toEqual([
+        { type: "float", defaultComponents: [5, 0, 0, 0] },
+        { type: "float", defaultComponents: [123, 0, 0, 0] },
+        { type: "float", defaultComponents: [0, 0, 0, 0] },
+        { type: "float", defaultComponents: [0, 0, 0, 0] },
+      ]);
+    expect(layout.outputs.map(({ type }) => type)).toEqual(["float2", "float2", "float2"]);
+    expect(layout.mappings).toEqual([
+      { inputIndex: 0, inputComponentIndex: 0, outputIndex: 0, outputComponentIndex: 0 },
+      { inputIndex: 3, inputComponentIndex: 0, outputIndex: 0, outputComponentIndex: 1 },
+      { inputIndex: 1, inputComponentIndex: 0, outputIndex: 1, outputComponentIndex: 0 },
+      { inputIndex: 3, inputComponentIndex: 0, outputIndex: 1, outputComponentIndex: 1 },
+      { inputIndex: 2, inputComponentIndex: 0, outputIndex: 2, outputComponentIndex: 0 },
+      { inputIndex: 3, inputComponentIndex: 0, outputIndex: 2, outputComponentIndex: 1 },
+    ]);
+    expect(layout.issues).toEqual([]);
+    expect(inputs.map((pin) => fixedExpressionInputType(convert, pin)))
+      .toEqual(["float", "float", "float", "float"]);
+    expect(outputs.map((pin) => fixedExpressionOutputType(convert, pin)))
+      .toEqual(["float2", "float2", "float2"]);
   });
 
   it("recognizes the two scalar outputs of BreakOutFloat2Components", () => {

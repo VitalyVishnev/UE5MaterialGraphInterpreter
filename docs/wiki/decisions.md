@@ -120,7 +120,7 @@ Context:
 One declaration per Unreal node produced mechanically correct but tiring `node_7`, `node_8`, and `node_9` chains.
 
 Decision:
-Inline one-use expressions. Retain function inputs, parameters, shared values, opaque operations, authored short node comments, and expressions that exceed the readability limit as stable declarations. Do not emit an unnamed Reroute declaration when it only aliases an existing identifier; preserve authored and Named Reroute names as semantic anchors. Name generated declarations by operation, never by Unreal's transient node number. Preserve vector output-channel semantics such as `.rg` and `.b`.
+Inline one-use expressions. Retain function inputs, parameters, shared values, opaque operations, authored short node comments, and expressions that exceed the readability limit as stable declarations. Repeated trivial component projections such as `workingNorm.g` remain inline because a generated `convert_17` alias adds no semantic information; an authored Description, Comment, Named Reroute, or manual Name Override still preserves the declaration. Do not emit an unnamed Reroute declaration when it only aliases an existing identifier; preserve authored and Named Reroute names as semantic anchors. Name generated declarations by operation, never by Unreal's transient node number. Preserve vector output-channel semantics such as `.rg` and `.b`.
 
 For a single-output external Material Function call, prefer a meaningful serialized output pin name such as `Selected Vector -> selectedVector`. Keep the asset-derived name only for generic pins such as `Result`, `Output`, or `Return Value`, where the pin contributes no semantic information.
 
@@ -383,7 +383,7 @@ Maintain one evidence-backed registry for built-in expression semantics. It supp
 
 - fixed outputs: `Length -> float`, `PreSkinnedNormal -> float3`, `VertexNormalWS -> float3`, `Transform -> float3`;
 - pin-specific outputs: `LocalPosition.XYZ -> float3`, `.XY -> float2`, `.Z -> float`;
-- serialized outputs: `MaterialExpressionConvert` reads each `ConvertOutputs(n).Type` value from the clipboard;
+- serialized component conversion: `MaterialExpressionConvert` decodes sparse input/output types, disconnected-input defaults, and every `input component -> output component` route; one layout drives inference and pseudo-HLSL;
 - same-type relations: `Saturate`, `VertexInterpolator`, and `ShaderStageSwitch` propagate compatible numeric types between their inputs and output.
 - screen-space derivatives: `DDX` and `DDY` preserve the input's scalar or vector width and render as HLSL `ddx` and `ddy`.
 
@@ -400,9 +400,10 @@ Evidence:
 - Epic's [UMaterialExpressionConvert API](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/Engine/UMaterialExpressionConvert) exposes dynamic `ConvertOutputs` and explicit component mappings.
 - Microsoft's [ddx](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx-graphics-hlsl-ddx) and [ddy](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx-graphics-hlsl-ddy) contracts specify a float result with the same dimensions as the input and pixel-shader-only availability; Epic exposes these operations as Material Expressions.
 - The supplied UE 5.8 coordinate-frame clipboard serializes `LocalPosition` pins as `XYZ`, `XY`, and `Z`, and serializes the sample Convert output as `ConvertOutputs(0)=(Type=Vector3)`.
+- Four supplied UE 5.8 Convert captures establish the sparse-array contract: omitted types mean scalar, omitted mapping fields are zero, missing `ConvertMappings(0)` still represents the default `input 0.r -> output 0.r` route, and disconnected inputs retain `ConvertInputs(n).DefaultValue`.
 
 Consequences:
-The coordinate-frame fixture now confirms `LocalPosition`, `Length`, `Convert`, `PreSkinnedNormal`, `VertexInterpolator`, `ShaderStageSwitch`, `VertexNormalWS`, and `Transform` types without manual UI entries. Truly unconstrained external function outputs remain explicit `?type` values.
+The coordinate-frame fixture now confirms `LocalPosition`, `Length`, `Convert`, `PreSkinnedNormal`, `VertexInterpolator`, `ShaderStageSwitch`, `VertexNormalWS`, and `Transform` types without manual UI entries. Convert identity routes collapse, channel reorders become swizzles such as `.gr`, assembled values become typed constructors, and separate outputs never mix routes. Truly unconstrained external function outputs remain explicit `?type` values.
 
 The same registry now covers all 51 unique Math expression classes in the supplied UE 5.8 palette clipboard. It stores rendering and type rules together, includes scalar `uint` semantics for `FloatToUInt`, `Modulo`, and `UIntToFloat`, preserves Period and Clamp modes, and gives detached terminal outputs structural labels instead of repeated `Output` labels. The maintained table is [UE 5.8 Math Expression Registry](math-expression-registry.md).
 
@@ -412,7 +413,16 @@ The advanced registry covers all 64 unique classes and 155 outputs in the suppli
 
 The procedural-noise extension reads the serialized enum instead of guessing from the common node class. Scalar Noise is always `float`; Vector Noise is `float3` for Cell Noise, Perlin 3D, and Perlin Curl, and `float4` for Perlin Gradient and Voronoi. Scalar Blue Noise is a parameterless `float`. Rendering preserves captured controls but does not invent omitted defaults.
 
-A second repository-backed UE 5.8 capture adds complete contracts for 15 Substrate helpers, wrappers, and operators with 19 outputs. New complex samples also verify `CollectionParameter`, `ConstantBiasScale`, `Distance`, `SphereMask`, `RotateAboutAxis`, and feature/shading/previous-frame/shadow switch families. Numeric switch branches promote forward; their result type is not propagated backward as an exact branch requirement. Scalar values remain valid splat sources for multi-channel Component Masks.
+Arithmetic inference treats a finite serialized default on an unconnected Math input as confirmed scalar evidence. This keeps loaded Material Function definitions consistent with standalone generation: operations such as `x * 0.5` propagate their output type even though only one input has a graph link. A confirmed scalar remains valid when a downstream annotated vector input broadcasts it; that consumer hint must not create a false conflict. The same rule applies to `dot(vector, scalar)`: the scalar broadcasts, while `dot` proves only its scalar result and does not force both operands to one width. `TransformPosition` is registered separately from direction-vector `Transform`; it accepts and returns `float3`, accepts a scalar Periodic World Tile Size, and renders its position-space modes explicitly.
+
+Material Function input and output identity and presentation order come from the call site's serialized `FunctionInputs(n).ExpressionInputId` and `FunctionOutputs(n).ExpressionOutputId`, never from editor-pin order or the physical order of Function Input/Output nodes in a pasted definition. One Function Signature Module maps stable IDs to call pins and definition nodes before validation, helper declaration/call rendering, type transfer, and inline rewiring.
+
+A second repository-backed UE 5.8 capture adds complete contracts for 15 Substrate helpers, wrappers, and operators with 19 outputs. New complex samples also verify `CollectionParameter`, `ConstantBiasScale`, `Distance`, `SphereMask`, `RotateAboutAxis`, and feature/shading/previous-frame/shadow switch families. Runtime `If` and `Switch` branches follow Epic's documented arithmetic compatibility: equal widths agree, scalar branches broadcast, and unequal vector widths conflict. Missing branch evidence can produce only an inferred type. Compile-time platform/quality switch families remain unresolved when their permutations have different widths instead of reporting a false runtime conflict. The result type is never propagated backward as an exact branch requirement. Scalar values remain valid splat sources for multi-channel Component Masks.
+
+Evidence:
+
+- Epic's [Material Data Manipulation and Arithmetic](https://dev.epicgames.com/documentation/unreal-engine/material-data-manipulation-and-arithmetic-in-unreal-engine) confirms that equal float widths are compatible, a scalar combines with any vector width, and unequal `float2`/`float3`/`float4` widths are invalid for arithmetic.
+- Epic's [Math Material Expressions](https://dev.epicgames.com/documentation/unreal-engine/math-material-expressions-in-unreal-engine) defines `If` as selecting one of three result values after comparing two scalar inputs.
 
 The same Registry stores the verified output signatures of the Engine Material Functions `MakeFloat3`, `BreakOutFloat2Components`, `BreakOutFloat3Components`, and `ScreenAlignedPixelToPixelUVs`. These exact contracts remove false `?type` results without treating arbitrary asset names as type evidence; their implementations remain opaque and still produce an unexpanded-function warning in generated code.
 
@@ -422,6 +432,8 @@ Related files:
 
 - `src/graph/expression-semantics.ts`
 - `src/graph/infer-types.ts`
+- `src/functions/signature.ts`
+- `src/functions/library.ts`
 - `src/pseudo-hlsl/generate.ts`
 - `tests/expression-semantics.test.ts`
 - `samples/MF_ResolveCoordinateFrame_Biplanar_Dither/`

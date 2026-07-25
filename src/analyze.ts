@@ -1,6 +1,10 @@
 import { parseClipboard } from "./clipboard/parser";
 import type { Diagnostic } from "./clipboard/raw-types";
-import { materialTypeOptions, type MaterialType } from "./graph/material-types";
+import {
+  declaredFunctionInputType,
+  materialTypeOptions,
+  type MaterialType,
+} from "./graph/material-types";
 import { isTerminalExpression } from "./graph/expression-semantics";
 import { resolveGraph } from "./graph/resolve";
 import { sliceOutputs, type StaticSwitchControl } from "./graph/slice";
@@ -208,10 +212,23 @@ function renderHelper(
       ? { type: override, confidence: "confirmed" as const }
       : library.knowledge.outputFacts.get(id);
   });
+  const signature = library.signature(target);
+  const declarationsById = new Map(
+    generated.functionInputs.map(({ id, declaration }) => [id, declaration]),
+  );
+  const inputNodesById = new Map(
+    [...graph.nodes.values()]
+      .filter((node) => node.kind === "function-input")
+      .map((node) => [(node.properties.get("Id") ?? "").toUpperCase(), node]),
+  );
+  const params = signature?.inputs.flatMap(({ id }) => {
+    const node = inputNodesById.get(id);
+    const declaration = declarationsById.get(id) ?? (node
+      ? `${renderedFact(declaredFunctionInputType(node.properties.get("InputType")), "confirmed")} ${safeName(node.displayName ?? "Input")}`
+      : undefined);
+    return declaration ? [declaration] : [];
+  }) ?? generated.functionInputs.map(({ declaration }) => declaration);
   const generatedLines = generated.code.split("\n");
-  const params = generatedLines
-    .filter((line) => line.endsWith("// Function input"))
-    .map((line) => line.replace(/;\s*\/\/ Function input$/, ""));
   let lines = generatedLines.filter((line) =>
     line !== "// Pseudo-HLSL: semantic approximation of the connected Unreal graph."
     && !line.endsWith("// Function input"));
@@ -226,9 +243,17 @@ function renderHelper(
     if (start >= 0) {
       for (const line of lines.slice(start + 2)) {
         const match = line.trim().match(/^([A-Za-z_]\w*):\s*(.+?)(?:,)?$/);
-        if (match) assignments.push(`${match[1]} = ${match[2].replace(/,$/, "")};`);
+        const value = match?.[2].replace(/,$/, "");
+        if (match && value !== match[1]) assignments.push(`${match[1]} = ${value};`);
       }
-      lines = [...lines.slice(0, start), ...assignments];
+      const outputNames = new Set(graph.outputs.map((output) => safeName(output.label)));
+      const body = lines.slice(0, start).map((line) => {
+        const declaration = line.match(/^(\s*)(?:\?[A-Za-z_]\w*\+?|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*=\s*(.+);$/);
+        return declaration && outputNames.has(declaration[2])
+          ? `${declaration[1]}${declaration[2]} = ${declaration[3]};`
+          : line;
+      });
+      lines = [...body, ...assignments];
     }
     const outParams = graph.outputs.map((output, index) => {
       const fact = outputFacts[index];
