@@ -355,3 +355,9 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 
 - Corrected `Sine`, `Cosine`, and `Tangent`: Unreal supplies cycle-domain input, so generated pseudo-HLSL now converts it to radians with `2 * PI * Input / Period` before calling the HLSL intrinsic.
 - Added one concise code-header note whenever an analyzed slice contains one of those nodes.
+
+## 2026-07-26 - Stable output identities and Static Bool function specializations
+
+- Replaced positional Material Function output identities with stable Unreal `FunctionOutput.Id` keys throughout inference, helper rendering, and manual Type Overrides.
+- Derived output facts independently for every resolved Static Bool Function Input configuration; the inspector now groups equal configurations and exposes scoped overrides.
+- Helper mode emits one uniquely named specialized helper per configuration and removes fixed Static Bool inputs from its runtime signature and calls.

@@ -14,10 +14,13 @@ import {
   type FunctionDependencyNode,
   type FunctionExpansionMode,
   type FunctionLibrary,
+  type FunctionSpecialization,
 } from "./functions/library";
 import {
   defaultPseudoHlslOptions,
+  functionCallId,
   functionOutputId,
+  functionOutputSpecializationId,
   generateAllPseudoHlsl,
   generatePseudoHlsl,
   identifier,
@@ -27,6 +30,7 @@ import {
   type PseudoHlslResult,
   type TypeOverrideGroup,
   type TypeOverrideValue,
+  type FunctionGenerationKnowledge,
 } from "./pseudo-hlsl/generate";
 
 export const ALL_OUTPUTS_ID = "__all_outputs__";
@@ -103,9 +107,22 @@ function functionStaticSwitchOverrides(
 ): Map<string, boolean> {
   return new Map(
     [...overrides].flatMap(([id, value]) =>
-      id.startsWith(`${target}::`) && !id.startsWith(`${target}::call:`)
+      id.startsWith(`${target}::`) && !id.startsWith(`${target}::call:`) && !id.startsWith(`${target}::config:`)
         ? [[id.slice(target.length + 2), value] as const]
         : []),
+  );
+}
+
+interface HelperTarget {
+  target: string;
+  specialization?: FunctionSpecialization;
+  callIds: string[];
+}
+
+function specializedInputIds(specialization?: FunctionSpecialization): Set<string> {
+  return new Set(
+    [...(specialization?.staticSwitchOverrides.keys() ?? [])]
+      .flatMap((id) => id.match(/^function-input:(.+)$/)?.[1] ?? []),
   );
 }
 
@@ -116,9 +133,9 @@ function helperTargets(
   globalMode: FunctionExpansionMode,
   modeOverrides: ReadonlyMap<string, FunctionExpansionMode>,
   staticSwitchOverrides: ReadonlyMap<string, boolean>,
-): string[] {
-  const ordered: string[] = [];
-  const visited = new Set<string>();
+): HelperTarget[] {
+  const ordered: HelperTarget[] = [];
+  const byKey = new Map<string, HelperTarget>();
   const visitGraph = (current: MaterialGraph, ownerTarget?: string): void => {
     if (!current.outputs.length) return;
     const slice = sliceOutputs(
@@ -131,24 +148,41 @@ function helperTargets(
       const node = current.nodes.get(nodeId);
       if (node?.kind !== "external-call") continue;
       const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
-      if (library.mode(target, globalMode, modeOverrides) !== "helpers" || visited.has(target)) continue;
+      if (library.mode(target, globalMode, modeOverrides) !== "helpers") continue;
       const definition = library.graph(target);
       if (!definition) continue;
-      visited.add(target);
-      const expanded = library.expand(definition, globalMode, modeOverrides, staticSwitchOverrides, true).graph;
+      const specialization = library.specialization(target, node, current, staticSwitchOverrides);
+      const key = `${target}::${specialization?.id ?? "generic"}`;
+      const callId = functionCallId(target, node.nodeGuid ?? node.id);
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.callIds.push(callId);
+        continue;
+      }
+      const item: HelperTarget = { target, specialization, callIds: [callId] };
+      byKey.set(key, item);
+      const expanded = library.expand(
+        definition,
+        globalMode,
+        modeOverrides,
+        specialization?.staticSwitchOverrides ?? staticSwitchOverrides,
+        true,
+      ).graph;
       visitGraph(expanded, target);
-      ordered.push(target);
+      ordered.push(item);
     }
   };
   visitGraph(graph);
   return ordered;
 }
 
-function helperNames(targets: readonly string[]): Map<string, string> {
-  const result = new Map<string, string>();
+function helperNames(targets: readonly HelperTarget[]): Map<HelperTarget, string> {
+  const result = new Map<HelperTarget, string>();
   const used = new Set<string>();
-  for (const target of [...targets].sort()) {
-    const base = materialFunctionName(target);
+  for (const target of [...targets].sort((left, right) =>
+    left.target.localeCompare(right.target)
+    || (left.specialization?.id ?? "").localeCompare(right.specialization?.id ?? ""))) {
+    const base = `${materialFunctionName(target.target)}${target.specialization ? `__${identifier(target.specialization.label)}` : ""}`;
     let name = base;
     let index = 2;
     while (used.has(name)) name = `${base}_${index++}`;
@@ -174,14 +208,18 @@ interface RenderedHelper {
 
 function editableHelperOutput(
   target: string,
-  index: number,
+  outputId: string,
   name: string,
-  library: FunctionLibrary,
+  knowledge: FunctionGenerationKnowledge,
   typeOverrides: ReadonlyMap<string, MaterialType>,
+  specialization?: FunctionSpecialization,
 ): TypeOverrideValue | undefined {
-  const id = functionOutputId(target, index);
-  const override = typeOverrides.get(id);
-  const fact = library.knowledge.outputFacts.get(id);
+  const genericId = functionOutputId(target, outputId);
+  const id = specialization
+    ? functionOutputSpecializationId(target, outputId, specialization.id)
+    : genericId;
+  const override = typeOverrides.get(id) ?? typeOverrides.get(genericId);
+  const fact = knowledge.outputFacts.get(genericId);
   if (!override && fact?.confidence === "confirmed") return undefined;
   return {
     id,
@@ -203,17 +241,25 @@ function renderHelper(
   graph: MaterialGraph,
   generated: PseudoHlslResult,
   library: FunctionLibrary,
+  knowledge: FunctionGenerationKnowledge,
   formatting: AnalysisFormatting,
   typeOverrides: ReadonlyMap<string, MaterialType>,
+  omittedInputIds: ReadonlySet<string> = new Set(),
+  specialization?: FunctionSpecialization,
 ): RenderedHelper {
-  const outputFacts = graph.outputs.map((_, index) => {
-    const id = functionOutputId(target, index);
-    const override = typeOverrides.get(id);
+  const signature = library.signature(target);
+  const outputFacts = graph.outputs.map((output, index) => {
+    const owner = graph.nodes.get(output.ownerNodeId);
+    const outputId = owner?.properties.get("Id") ?? signature?.outputs[index]?.id ?? output.ownerPinId;
+    const genericId = functionOutputId(target, outputId);
+    const id = specialization
+      ? functionOutputSpecializationId(target, outputId, specialization.id)
+      : genericId;
+    const override = typeOverrides.get(id) ?? typeOverrides.get(genericId);
     return override
       ? { type: override, confidence: "confirmed" as const }
-      : library.knowledge.outputFacts.get(id);
+      : knowledge.outputFacts.get(genericId);
   });
-  const signature = library.signature(target);
   const declarationsById = new Map(
     generated.functionInputs.map(({ id, declaration }) => [id, declaration]),
   );
@@ -223,6 +269,7 @@ function renderHelper(
       .map((node) => [(node.properties.get("Id") ?? "").toUpperCase(), node]),
   );
   const params = signature?.inputs.flatMap(({ id }) => {
+    if (omittedInputIds.has(id)) return [];
     const node = inputNodesById.get(id);
     const declaration = declarationsById.get(id) ?? (node
       ? `${renderedFact(declaredFunctionInputType(node.properties.get("InputType")), "confirmed")} ${safeName(node.displayName ?? "Input")}`
@@ -275,13 +322,15 @@ function renderHelper(
 
   const codeLines = code.split("\n");
   const signatureSymbols = graph.outputs.flatMap((output, index) => {
+    const owner = graph.nodes.get(output.ownerNodeId);
     const outputName = graph.outputs.length === 1 ? name : safeName(output.label);
     const typeOverride = editableHelperOutput(
       target,
-      index,
+      owner?.properties.get("Id") ?? signature?.outputs[index]?.id ?? output.ownerPinId,
       outputName,
-      library,
+      knowledge,
       typeOverrides,
+      specialization,
     );
     if (!typeOverride) return [];
     const lineIndex = codeLines.findIndex((line) =>
@@ -354,7 +403,7 @@ export function createAnalysisWorkspace(
         allowLargeInline,
       );
       const graph = expanded.graph;
-      const functionTree = library.tree();
+      const functionTree = library.tree(resolvedStaticSwitchOverrides);
       const cycleDiagnostics = functionCycleDiagnostics(functionTree);
       const selection = selectedOutputs(graph, requestedOutputId);
       if (!selection) {
@@ -382,9 +431,21 @@ export function createAnalysisWorkspace(
         resolvedStaticSwitchOverrides,
       );
       const names = helperNames(targets);
+      const callNames = new Map<string, string>();
+      const callOmittedInputIds = new Map<string, ReadonlySet<string>>();
+      for (const target of targets) {
+        const name = names.get(target);
+        if (!name) continue;
+        const omittedInputIds = specializedInputIds(target.specialization);
+        for (const callId of target.callIds) {
+          callNames.set(callId, name);
+          if (omittedInputIds.size) callOmittedInputIds.set(callId, omittedInputIds);
+        }
+      }
       const knowledge = {
-        ...library.knowledge,
-        callNames: names,
+        ...library.knowledge(resolvedStaticSwitchOverrides),
+        callNames,
+        callOmittedInputIds,
         callInputOverrides: resolvedStaticSwitchOverrides,
       };
       const generated = selection.selectedOutputId === ALL_OUTPUTS_ID
@@ -404,34 +465,50 @@ export function createAnalysisWorkspace(
             resolvedStaticSwitchOverrides,
             nameOverrides,
             knowledge,
-          );
+      );
       const helperResults = targets.flatMap((target) => {
-        const definition = library.graph(target);
+        const definition = library.graph(target.target);
         const name = names.get(target);
         if (!definition || !name) return [];
+        const helperStaticSwitchOverrides = target.specialization?.staticSwitchOverrides
+          ?? functionStaticSwitchOverrides(target.target, resolvedStaticSwitchOverrides);
         const helperGraph = library.expand(
           definition,
           functionMode,
           functionModeOverrides,
-          resolvedStaticSwitchOverrides,
+          helperStaticSwitchOverrides,
           true,
         ).graph;
+        const helperKnowledge = {
+          ...knowledge,
+          outputFacts: new Map([
+            ...knowledge.outputFacts,
+            ...(target.specialization?.outputFacts ?? []),
+          ]),
+        };
         const helperGenerated = generateAllPseudoHlsl(
           helperGraph,
           typeOverrides,
           formatting,
-          functionStaticSwitchOverrides(target, resolvedStaticSwitchOverrides),
+          helperStaticSwitchOverrides,
           nameOverrides,
-          { ...knowledge, preserveStaticSwitches: true, symbolNamespace: target },
+          {
+            ...helperKnowledge,
+            preserveStaticSwitches: true,
+            symbolNamespace: `${target.target}:${target.specialization?.id ?? "generic"}`,
+          },
         );
         const rendered = renderHelper(
-          target,
+          target.target,
           name,
           helperGraph,
           helperGenerated,
           library,
+          helperKnowledge,
           formatting,
           typeOverrides,
+          specializedInputIds(target.specialization),
+          target.specialization,
         );
         return [{
           ...rendered,

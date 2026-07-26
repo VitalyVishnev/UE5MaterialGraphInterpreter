@@ -2,6 +2,27 @@
 
 This page stores current bugs, limitations, and validation gaps. Keep it focused on dangerous or still-open issues.
 
+## Limitation: Function Static Bool specialization requires a resolvable call value
+
+Status: Open
+
+Symptoms:
+An external Material Function call whose `FunctionInput_StaticBool` cannot be traced to a serialized boolean may retain a generic inferred or unresolved output type.
+
+Likely cause:
+The clipboard has no runtime material-instance permutation value. Specializing such a call would fabricate a branch and could hide a valid type conflict.
+
+Current workaround:
+Set the corresponding Static Switch control in Graph Inspector, or choose the known output type manually. Calls with resolved values receive independent configuration-specific facts and overrides.
+
+Do not repeat:
+Do not apply a fact from one Static Bool call configuration to another unresolved configuration.
+
+Related files:
+
+- `src/functions/library.ts`
+- `src/analyze.ts`
+
 ## Limitation: Codex browser can crash while selecting a sample directory
 
 Status: Unverified

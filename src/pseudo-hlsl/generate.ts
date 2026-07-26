@@ -32,7 +32,7 @@ import type {
   GraphPin,
   MaterialGraph,
 } from "../graph/types";
-import { orderedCallInputs } from "../functions/signature";
+import { callFunctionSignature, orderedCallInputs } from "../functions/signature";
 
 export interface FunctionInputDeclaration {
   id: string;
@@ -50,8 +50,13 @@ export interface PseudoHlslResult {
 
 export interface FunctionGenerationKnowledge {
   outputFacts: ReadonlyMap<string, InferredType>;
+  callOutputFacts?: ReadonlyMap<string, InferredType>;
+  callOutputOverrideIds?: ReadonlyMap<string, string>;
+  callOutputLabels?: ReadonlyMap<string, string>;
+  callSpecializationTargets?: ReadonlySet<string>;
   loadedTargets: ReadonlySet<string>;
   callNames?: ReadonlyMap<string, string>;
+  callOmittedInputIds?: ReadonlyMap<string, ReadonlySet<string>>;
   callInputOverrides?: ReadonlyMap<string, boolean>;
   preserveStaticSwitches?: boolean;
   symbolNamespace?: string;
@@ -262,8 +267,43 @@ function valueTypeOverrideId(node: GraphNode, pin: GraphPin, namespace?: string)
   return `ValueType:${editableSymbolId(node, pin, namespace)}`;
 }
 
-export function functionOutputId(target: string, outputIndex: number): string {
-  return `${target}::${outputIndex}`;
+export function functionOutputId(target: string, outputId: string): string {
+  return `${target}::output:${outputId.toUpperCase()}`;
+}
+
+export function functionCallOutputId(target: string, callId: string, outputId: string): string {
+  return `${target}::call:${callId}::output:${outputId.toUpperCase()}`;
+}
+
+export function functionCallId(target: string, callId: string): string {
+  return `${target}::call:${callId}`;
+}
+
+export function functionOutputSpecializationId(
+  target: string,
+  outputId: string,
+  specialization: string,
+): string {
+  return `${functionOutputId(target, outputId)}::specialization:${specialization}`;
+}
+
+function externalFunctionOutputId(node: GraphNode, pin: GraphPin): string {
+  const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
+  const signatureOutput = callFunctionSignature(node).outputs.find(({ pin: candidate }) => candidate?.id === pin.id);
+  return functionOutputId(target, signatureOutput?.id || pin.id);
+}
+
+function externalFunctionCallOutputId(node: GraphNode, pin: GraphPin): string {
+  const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
+  const signatureOutput = callFunctionSignature(node).outputs.find(({ pin: candidate }) => candidate?.id === pin.id);
+  return functionCallOutputId(target, node.nodeGuid ?? node.id, signatureOutput?.id || pin.id);
+}
+
+function externalFunctionCallId(node: GraphNode): string {
+  return functionCallId(
+    node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction",
+    node.nodeGuid ?? node.id,
+  );
 }
 
 function callInputOverrideId(target: string, node: GraphNode, inputId: string): string {
@@ -598,11 +638,16 @@ function generatePseudoHlslForOutputs(
       if (override) valueOverrides.set(outputKey(node.id, pin.id), override);
     }
     if (node.kind === "external-call") {
-      const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
-      outputPins(node).forEach((pin, index) => {
-        const override = overrides.get(functionOutputId(target, index));
+      outputPins(node).forEach((pin) => {
+        const outputId = externalFunctionOutputId(node, pin);
+        const callOutputId = externalFunctionCallOutputId(node, pin);
+        const override = overrides.get(functionKnowledge?.callOutputOverrideIds?.get(callOutputId) ?? outputId)
+          ?? overrides.get(outputId);
         if (override) valueOverrides.set(outputKey(node.id, pin.id), override);
-        const fact = functionKnowledge?.outputFacts.get(functionOutputId(target, index));
+        const callFact = functionKnowledge?.callOutputFacts?.get(callOutputId);
+        const fact = callFact ?? (functionKnowledge?.callSpecializationTargets?.has(
+          node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction",
+        ) ? undefined : functionKnowledge?.outputFacts.get(outputId));
         if (fact) initialFacts.set(outputKey(node.id, pin.id), fact);
       });
     }
@@ -640,9 +685,7 @@ function generatePseudoHlslForOutputs(
     nameOverrides.get(editableSymbolId(node, pin, functionKnowledge?.symbolNamespace)) ?? fallback;
   const externalTypeOverrideId = (node: GraphNode, pin: GraphPin): string | undefined => {
     if (node.kind !== "external-call") return undefined;
-    const index = outputPins(node).findIndex((candidate) => candidate.id === pin.id);
-    if (index < 0) return undefined;
-    return functionOutputId(node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction", index);
+    return externalFunctionOutputId(node, pin);
   };
   const registerSymbol = (node: GraphNode, pin: GraphPin, name: string, value?: Value): void => {
     const id = editableSymbolId(node, pin, functionKnowledge?.symbolNamespace);
@@ -1095,14 +1138,18 @@ function generatePseudoHlslForOutputs(
       }
       case "MaterialExpressionMaterialFunctionCall": {
         const target = node.properties.get("MaterialFunction") ?? "UnresolvedMaterialFunction";
-        const args = orderedCallInputs(node).map(({ pin, id: inputId }) => {
+        const omittedInputIds = functionKnowledge?.callOmittedInputIds?.get(externalFunctionCallId(node));
+        const args = orderedCallInputs(node).flatMap(({ pin, id: inputId }) => {
+          if (inputId && omittedInputIds?.has(inputId)) return [];
           if (!pin) return "unresolved_input";
           const override = inputId
             ? functionKnowledge?.callInputOverrides?.get(callInputOverrideId(target, node, inputId))
             : undefined;
-          return override === undefined ? linkedValue(node, pin).code : String(override);
+          return [override === undefined ? linkedValue(node, pin).code : String(override)];
         });
-        const functionName = functionKnowledge?.callNames?.get(target) ?? materialFunctionName(target);
+        const functionName = functionKnowledge?.callNames?.get(externalFunctionCallId(node))
+          ?? functionKnowledge?.callNames?.get(target)
+          ?? materialFunctionName(target);
         diagnostics.push({
           code: "external-function",
           severity: functionKnowledge?.loadedTargets.has(target) ? "info" : "warning",
@@ -1569,10 +1616,11 @@ function generatePseudoHlslForOutputs(
       name: materialFunctionName(target),
       kind: "external-function" as const,
       values: firstOutputs.map((pin, index): TypeOverrideValue => {
-        const id = functionOutputId(target, index);
+        const id = externalFunctionOutputId(nodes[0], pin);
         const override = overrides.get(id);
         const facts = nodes.map((node) => {
-          const candidate = outputPins(node)[index];
+          const candidate = outputPins(node).find((candidate) =>
+            externalFunctionOutputId(node, candidate) === id);
           return candidate
             ? typeInference.facts.get(outputKey(node.id, candidate.id))
             : undefined;

@@ -322,7 +322,7 @@ function renderDiagnostics(result: AnalysisResult): number {
 }
 
 function functionOutputValue(
-  output: FunctionDependencyNode["outputs"][number],
+  output: Pick<FunctionDependencyNode["outputs"][number], "id" | "name" | "type" | "confidence">,
 ): TypeOverrideValue {
   const override = typeOverrides.get(output.id);
   return {
@@ -526,34 +526,42 @@ function renderMaterialFunctions(result: AnalysisResult): void {
         card.append(error);
       }
       for (const summary of node.outputs) {
-        const output = functionOutputValue(summary);
-        const row = document.createElement("label");
-        row.className = "function-output";
-        const label = document.createElement("span");
-        label.textContent = `Output · ${output.name}`;
-        const select = document.createElement("select");
-        select.className = `type-select ${output.status}`;
-        select.title = output.type
-          ? `The loaded graph derives ${output.type}. Choose another type only if Unreal proves otherwise.`
-          : "The graph still cannot derive this output type. Choose the type shown inside Unreal.";
-        populateTypeSelect(select, output);
-        select.addEventListener("change", () => {
-          setTypeOverride(output.id, select.value as MaterialType | "");
-          reanalyzeAccepted();
-        });
-        const control = document.createElement("div");
-        control.className = "function-output-control";
-        control.append(select);
-        if (output.status === "unknown" && summary.unresolvedDependencies?.length) {
-          const hint = document.createElement("small");
-          hint.className = "function-output-hint";
-          const names = summary.unresolvedDependencies.join(", ");
-          hint.textContent = `Needs ${names} — paste its definition below.`;
-          hint.title = "This output depends on a nested Material Function whose definition is missing or invalid.";
-          control.append(hint);
+        const variants = summary.variants?.length
+          ? summary.variants.map((variant) => ({
+              ...variant,
+              name: `${summary.name} — ${variant.label}${variant.callCount > 1 ? ` · ${variant.callCount} calls` : ""}`,
+            }))
+          : [summary];
+        for (const variant of variants) {
+          const output = functionOutputValue(variant);
+          const row = document.createElement("label");
+          row.className = "function-output";
+          const label = document.createElement("span");
+          label.textContent = `Output · ${output.name}`;
+          const select = document.createElement("select");
+          select.className = `type-select ${output.status}`;
+          select.title = output.type
+            ? `The loaded graph derives ${output.type}. Choose another type only if Unreal proves otherwise.`
+            : "The graph still cannot derive this output type. Choose the type shown inside Unreal.";
+          populateTypeSelect(select, output);
+          select.addEventListener("change", () => {
+            setTypeOverride(output.id, select.value as MaterialType | "");
+            reanalyzeAccepted();
+          });
+          const control = document.createElement("div");
+          control.className = "function-output-control";
+          control.append(select);
+          if (output.status === "unknown" && summary.unresolvedDependencies?.length) {
+            const hint = document.createElement("small");
+            hint.className = "function-output-hint";
+            const names = summary.unresolvedDependencies.join(", ");
+            hint.textContent = `Needs ${names} — paste its definition below.`;
+            hint.title = "This output depends on a nested Material Function whose definition is missing or invalid.";
+            control.append(hint);
+          }
+          row.append(label, control);
+          card.append(row);
         }
-        row.append(label, control);
-        card.append(row);
       }
 
       if (node.staticSwitches.length) {

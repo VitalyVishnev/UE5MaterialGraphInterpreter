@@ -18,7 +18,7 @@ Reasoning:
 The supplied clipboard is deterministic first-party evidence from the user's open Unreal project. Exact IDs prevent accidental attachment of a similarly named or stale function. Graph-level expansion preserves links, types, switches, and repeated-call identity more safely than replacing rendered text.
 
 Consequences:
-Definitions are private to the current browser tab, survive refresh, and disappear when the tab closes. There is no backend, import/export, or Unreal asset reader. The output remains explanatory pseudo-HLSL rather than Unreal compiler code. Static Bool Function Inputs are specialized per authored call site; identical serialized configurations share one UI control.
+Definitions are private to the current browser tab, survive refresh, and disappear when the tab closes. There is no backend, import/export, or Unreal asset reader. The output remains explanatory pseudo-HLSL rather than Unreal compiler code. Static Bool Function Inputs are specialized per authored call site; calls with the same resolved input values share one configuration and, in Helper mode, one specialized helper.
 
 Related files:
 
@@ -222,12 +222,12 @@ Context:
 The graph often provides only an inferred type, or no type, for an external Material Function output. The graph author usually knows the function's actual signature.
 
 Decision:
-Show one editable entry per unique Material Function path, never one per call node. List its outputs with an automatic inferred/minimum/unknown state and a dropdown containing the supported material type vocabulary. A manual selection is authoritative for the current clipboard and applies to every call with the same function path and output index. Re-run analysis immediately after each selection.
+Show one editable entry per unique Material Function path, never one per call node. Identify every output by its stable Unreal `FunctionOutput.Id`, never by its serialized position. List its outputs with an automatic inferred/minimum/unknown state and a dropdown containing the supported material type vocabulary. When Static Bool Function Inputs give the same output different facts at different call sites, show one row per resolved configuration; its override applies only to the matching calls. Re-run analysis immediately after each selection.
 
 Sort functions with unknown outputs first, inferred/minimum outputs second, and overridden functions last; sort alphabetically within each group. Keep parser line numbers internally but do not display them in the Graph Inspector because clipboard text is not a user-facing source listing. Group repeated orphan text, unresolved links, and unresolved Named Reroutes by diagnostic kind and show their occurrence count instead of flooding the panel with per-pin messages.
 
 Reasoning:
-Function signatures belong to the function asset rather than individual call nodes. Grouping avoids duplicate `Pi` entries and makes one user correction update the entire generated program.
+Function signatures belong to the function asset, but a compile-time Function Input can select a materially different output graph. Stable IDs preserve identity across pin reordering; configuration-scoped rows prevent one valid override from corrupting another permutation.
 
 Consequences:
 Overrides are intentionally session-local and reset when a new clipboard is accepted. They are not yet a persistent global registry.

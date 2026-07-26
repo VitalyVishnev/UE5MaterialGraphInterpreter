@@ -5,7 +5,13 @@ import { declaredFunctionInputType, type MaterialType } from "../graph/material-
 import { resolveGraph } from "../graph/resolve";
 import { sliceOutputs, type StaticSwitchControl } from "../graph/slice";
 import type { GraphLink, GraphNode, GraphOutput, GraphPin, MaterialGraph } from "../graph/types";
-import { functionOutputId, materialFunctionName, type FunctionGenerationKnowledge } from "../pseudo-hlsl/generate";
+import {
+  functionCallOutputId,
+  functionOutputId,
+  functionOutputSpecializationId,
+  materialFunctionName,
+  type FunctionGenerationKnowledge,
+} from "../pseudo-hlsl/generate";
 import {
   callFunctionSignature,
   definitionFunctionSignature,
@@ -21,6 +27,15 @@ export interface FunctionValueSummary {
   type?: MaterialType;
   confidence?: InferredType["confidence"];
   unresolvedDependencies?: string[];
+  variants?: FunctionValueVariant[];
+}
+
+export interface FunctionValueVariant {
+  id: string;
+  label: string;
+  type?: MaterialType;
+  confidence?: InferredType["confidence"];
+  callCount: number;
 }
 
 export interface FunctionDependencyNode {
@@ -43,6 +58,14 @@ export interface FunctionExpansion {
   diagnostics: Diagnostic[];
 }
 
+export interface FunctionSpecialization {
+  target: string;
+  id: string;
+  label: string;
+  staticSwitchOverrides: ReadonlyMap<string, boolean>;
+  outputFacts: ReadonlyMap<string, InferredType>;
+}
+
 export type { FunctionSignature } from "./signature";
 
 interface Definition {
@@ -55,13 +78,19 @@ interface Definition {
 }
 
 export interface FunctionLibrary {
-  readonly knowledge: FunctionGenerationKnowledge;
   readonly definitions: ReadonlyMap<string, string>;
-  tree(): FunctionDependencyNode[];
+  tree(staticSwitchOverrides?: ReadonlyMap<string, boolean>): FunctionDependencyNode[];
   graph(target: string): MaterialGraph | undefined;
   signature(target: string): FunctionSignature | undefined;
   mode(target: string, globalMode: FunctionExpansionMode, overrides: ReadonlyMap<string, FunctionExpansionMode>): FunctionExpansionMode;
   resolveStaticSwitchOverrides(overrides: ReadonlyMap<string, boolean>): ReadonlyMap<string, boolean>;
+  knowledge(staticSwitchOverrides?: ReadonlyMap<string, boolean>): FunctionGenerationKnowledge;
+  specialization(
+    target: string,
+    call: GraphNode,
+    graph: MaterialGraph,
+    staticSwitchOverrides?: ReadonlyMap<string, boolean>,
+  ): FunctionSpecialization | undefined;
   expand(
     graph: MaterialGraph,
     globalMode: FunctionExpansionMode,
@@ -192,8 +221,10 @@ function seedFacts(
 ): Map<string, InferredType> {
   const seeds = new Map<string, InferredType>();
   for (const node of externalCalls(graph)) {
-    outputPins(node).forEach((pin, index) => {
-      const fact = facts.get(functionOutputId(targetOf(node), index));
+    const signature = callFunctionSignature(node);
+    outputPins(node).forEach((pin) => {
+      const output = signature.outputs.find(({ pin: candidate }) => candidate?.id === pin.id);
+      const fact = facts.get(functionOutputId(targetOf(node), output?.id || pin.id));
       if (fact) seeds.set(valueKey(node.id, pin.id), fact);
     });
   }
@@ -208,12 +239,12 @@ function inferDefinitionFacts(definitions: ReadonlyMap<string, Definition>): Map
       if (!definition.valid || !definition.graph.outputs.length) continue;
       const slice = sliceOutputs(definition.graph, definition.graph.outputs.map(({ id }) => id));
       const inferred = inferTypes(definition.graph, slice, new Map(), seedFacts(definition.graph, result));
-      for (const [index, signatureOutput] of definition.expectedSignature.outputs.entries()) {
+      for (const signatureOutput of definition.expectedSignature.outputs) {
         const output = definitionOutput(definition, signatureOutput.id);
         const fact = output?.sourceNodeId && output.sourcePinId
           ? inferred.facts.get(valueKey(output.sourceNodeId, output.sourcePinId))
           : undefined;
-        const id = functionOutputId(definition.target, index);
+        const id = functionOutputId(definition.target, signatureOutput.id);
         const previous = result.get(id);
         if (fact && (previous?.type !== fact.type || previous.confidence !== fact.confidence)) {
           result.set(id, fact);
@@ -224,6 +255,147 @@ function inferDefinitionFacts(definitions: ReadonlyMap<string, Definition>): Map
     if (!changed) break;
   }
   return result;
+}
+
+function staticFunctionInputIds(definition: Definition): string[] {
+  return [...new Set(
+    sliceOutputs(definition.graph, definition.graph.outputs.map(({ id }) => id)).staticSwitches
+      .flatMap((control) => control.id.match(/^function-input:(.+)$/)?.[1] ?? [])
+      .map((id) => id.toUpperCase()),
+  )].sort();
+}
+
+function targetStaticOverrides(
+  target: string,
+  overrides: ReadonlyMap<string, boolean>,
+): Map<string, boolean> {
+  const prefix = `${target}::`;
+  return new Map([...overrides].flatMap(([id, value]) =>
+    id.startsWith(prefix) && !id.startsWith(`${target}::call:`) && !id.startsWith(`${target}::config:`)
+      ? [[id.slice(prefix.length), value] as const]
+      : [],
+  ));
+}
+
+function callStaticInputValues(
+  target: string,
+  call: GraphNode,
+  graph: MaterialGraph,
+  inputIds: readonly string[],
+  overrides: ReadonlyMap<string, boolean>,
+): Map<string, boolean> | undefined {
+  const signature = callFunctionSignature(call);
+  const values = new Map<string, boolean>();
+  for (const inputId of inputIds) {
+    const input = signature.inputs.find(({ id }) => id === inputId);
+    const inputPin = input ? inputPins(call)[input.index] : undefined;
+    const value = overrides.get(callInputOverrideId(target, call, inputId))
+      ?? serializedBool(inputPin?.defaultValue)
+      ?? resolveStaticBool(graph, inputPin?.links[0]);
+    if (value === undefined) return undefined;
+    values.set(inputId, value);
+  }
+  return values;
+}
+
+function inferCallOutputFacts(
+  definitions: ReadonlyMap<string, Definition>,
+  occurrencesByTarget: ReadonlyMap<string, CallOccurrence[]>,
+  genericFacts: ReadonlyMap<string, InferredType>,
+  staticSwitchOverrides: ReadonlyMap<string, boolean>,
+): {
+  facts: Map<string, InferredType>;
+  overrideIds: Map<string, string>;
+  labels: Map<string, string>;
+  specializedTargets: Set<string>;
+} {
+  const facts = new Map<string, InferredType>();
+  const overrideIds = new Map<string, string>();
+  const labels = new Map<string, string>();
+  const specializedTargets = new Set<string>();
+  for (const [target, definition] of definitions) {
+    const inputIds = staticFunctionInputIds(definition);
+    if (!inputIds.length) continue;
+    specializedTargets.add(target);
+    const baseOverrides = targetStaticOverrides(target, staticSwitchOverrides);
+    for (const occurrence of occurrencesByTarget.get(target) ?? []) {
+      const values = callStaticInputValues(
+        target,
+        occurrence.node,
+        occurrence.graph,
+        inputIds,
+        staticSwitchOverrides,
+      );
+      if (!values) continue;
+      const specialization = [...values]
+        .map(([inputId, value]) => `${inputId}=${value}`)
+        .join("|");
+      const label = [...values].map(([inputId, value]) => {
+        const input = definition.expectedSignature.inputs.find(({ id }) => id === inputId);
+        return `${input?.name ?? inputId}: ${value ? "True" : "False"}`;
+      }).join(" · ");
+      const overrides = new Map(baseOverrides);
+      for (const [inputId, value] of values) overrides.set(`function-input:${inputId}`, value);
+      const slice = sliceOutputs(
+        definition.graph,
+        definition.graph.outputs.map(({ id }) => id),
+        overrides,
+      );
+      const inferred = inferTypes(definition.graph, slice, new Map(), seedFacts(definition.graph, genericFacts));
+      const signature = callFunctionSignature(occurrence.node);
+      for (const output of signature.outputs) {
+        if (!output.pin) continue;
+        const definitionOutputNode = definitionOutput(definition, output.id);
+        const fact = definitionOutputNode?.sourceNodeId && definitionOutputNode.sourcePinId
+          ? inferred.facts.get(valueKey(definitionOutputNode.sourceNodeId, definitionOutputNode.sourcePinId))
+          : undefined;
+        if (fact) {
+          const callOutputId = functionCallOutputId(
+            target,
+            occurrence.node.nodeGuid ?? occurrence.node.id,
+            output.id,
+          );
+          facts.set(callOutputId, fact);
+          overrideIds.set(callOutputId, functionOutputSpecializationId(target, output.id, specialization));
+          labels.set(callOutputId, label);
+        }
+      }
+    }
+  }
+  return { facts, overrideIds, labels, specializedTargets };
+}
+
+function specializationForCall(
+  target: string,
+  call: GraphNode,
+  graph: MaterialGraph,
+  definition: Definition | undefined,
+  genericFacts: ReadonlyMap<string, InferredType>,
+  staticSwitchOverrides: ReadonlyMap<string, boolean>,
+): FunctionSpecialization | undefined {
+  if (!definition) return undefined;
+  const inputIds = staticFunctionInputIds(definition);
+  if (!inputIds.length) return undefined;
+  const values = callStaticInputValues(target, call, graph, inputIds, staticSwitchOverrides);
+  if (!values) return undefined;
+  const id = [...values].map(([inputId, value]) => `${inputId}=${value}`).join("|");
+  const label = [...values].map(([inputId, value]) => {
+    const input = definition.expectedSignature.inputs.find(({ id }) => id === inputId);
+    return `${input?.name ?? inputId}: ${value ? "True" : "False"}`;
+  }).join(" · ");
+  const overrides = targetStaticOverrides(target, staticSwitchOverrides);
+  for (const [inputId, value] of values) overrides.set(`function-input:${inputId}`, value);
+  const slice = sliceOutputs(definition.graph, definition.graph.outputs.map(({ id }) => id), overrides);
+  const inferred = inferTypes(definition.graph, slice, new Map(), seedFacts(definition.graph, genericFacts));
+  const outputFacts = new Map<string, InferredType>();
+  for (const output of definition.expectedSignature.outputs) {
+    const definitionOutputNode = definitionOutput(definition, output.id);
+    const fact = definitionOutputNode?.sourceNodeId && definitionOutputNode.sourcePinId
+      ? inferred.facts.get(valueKey(definitionOutputNode.sourceNodeId, definitionOutputNode.sourcePinId))
+      : undefined;
+    if (fact) outputFacts.set(functionOutputId(target, output.id), fact);
+  }
+  return { target, id, label, staticSwitchOverrides: overrides, outputFacts };
 }
 
 function inlineLiteral(
@@ -414,7 +586,6 @@ export function compileFunctionLibrary(
   );
   const outputFacts = inferDefinitionFacts(validDefinitions);
   const loadedTargets = new Set(validDefinitions.keys());
-  const knowledge: FunctionGenerationKnowledge = { outputFacts, loadedTargets };
   const groupedSwitchAliases = new Map<string, string[]>();
   const switchesByTarget = new Map<string, StaticSwitchControl[]>();
 
@@ -447,17 +618,18 @@ export function compileFunctionLibrary(
       const configuration = inputControls.map(({ inputId }) => {
         const input = signature.inputs.find((candidate) => candidate.id === inputId);
         const inputPin = input ? inputPins(occurrence.node)[input.index] : undefined;
-        return serializedBool(inputPin?.defaultValue)
+        const value = serializedBool(inputPin?.defaultValue)
           ?? resolveStaticBool(occurrence.graph, inputPin?.links[0])
           ?? "?";
+        return `${inputId}=${value}`;
       }).join("|");
       groups.set(configuration, [...(groups.get(configuration) ?? []), occurrence]);
     }
 
-    const grouped = [...groups.values()].flatMap((group, groupIndex) =>
+    const grouped = [...groups.entries()].flatMap(([configuration, group]) =>
       inputControls.map(({ control, inputId }) => {
         const directIds = group.map(({ node }) => callInputOverrideId(target, node, inputId));
-        const id = `${target}::group:${groupIndex + 1}::function-input:${inputId}`;
+        const id = `${target}::config:${configuration}::function-input:${inputId}`;
         groupedSwitchAliases.set(id, directIds);
         const first = group[0];
         const signature = first
@@ -480,7 +652,13 @@ export function compileFunctionLibrary(
     return result;
   };
 
-  const tree = (): FunctionDependencyNode[] => {
+  const tree = (staticSwitchOverrides: ReadonlyMap<string, boolean> = new Map()): FunctionDependencyNode[] => {
+    const currentKnowledge = inferCallOutputFacts(
+      validDefinitions,
+      occurrencesByTarget,
+      outputFacts,
+      staticSwitchOverrides,
+    );
     const seen = new Set<string>();
     const build = (graph: MaterialGraph, ancestors: ReadonlySet<string>): FunctionDependencyNode[] => {
       const targets = [...new Set(externalCalls(graph).map(targetOf))];
@@ -505,8 +683,32 @@ export function compileFunctionLibrary(
           shared,
           cycle,
           error: definition?.error,
-          outputs: expected.outputs.map((output, index) => {
-            const fact = outputFacts.get(functionOutputId(target, index));
+          outputs: expected.outputs.map((output) => {
+            const occurrences = occurrencesByTarget.get(target) ?? [];
+            const variants = new Map<string, FunctionValueVariant>();
+            for (const occurrence of occurrences) {
+              const callOutputId = functionCallOutputId(
+                target,
+                occurrence.node.nodeGuid ?? occurrence.node.id,
+                output.id,
+              );
+              const fact = currentKnowledge.facts.get(callOutputId);
+              const id = currentKnowledge.overrideIds.get(callOutputId);
+              if (!fact || !id) continue;
+              const existing = variants.get(id);
+              variants.set(id, {
+                id,
+                label: currentKnowledge.labels.get(callOutputId) ?? "Static configuration",
+                type: fact.type,
+                confidence: fact.confidence,
+                callCount: (existing?.callCount ?? 0) + 1,
+              });
+            }
+            const variantValues = [...variants.values()];
+            const types = new Set(variantValues.map(({ type, confidence }) => `${type}:${confidence}`));
+            const fact = types.size === 1 && variantValues.length
+              ? { type: variantValues[0].type!, confidence: variantValues[0].confidence! }
+              : outputFacts.get(functionOutputId(target, output.id));
             const definitionGraph = valid && definition ? definition.graph : undefined;
             const graphOutput = definitionGraph && definition ? definitionOutput(definition, output.id) : undefined;
             const unresolvedDependencies = graphOutput && definitionGraph
@@ -520,10 +722,11 @@ export function compileFunctionLibrary(
                 )]
               : [];
             return {
-              id: functionOutputId(target, index),
+              id: functionOutputId(target, output.id),
               name: output.name,
               type: fact?.type,
               confidence: fact?.confidence,
+              variants: variantValues.length > 1 ? variantValues : undefined,
               unresolvedDependencies,
             };
           }),
@@ -617,7 +820,6 @@ export function compileFunctionLibrary(
   };
 
   return {
-    knowledge,
     definitions: new Map(sources),
     tree,
     graph: (target) => {
@@ -636,6 +838,31 @@ export function compileFunctionLibrary(
       }
       return resolved;
     },
+    knowledge: (staticSwitchOverrides = new Map()) => {
+      const specialized = inferCallOutputFacts(
+        validDefinitions,
+        occurrencesByTarget,
+        outputFacts,
+        staticSwitchOverrides,
+      );
+      return {
+        outputFacts,
+        callOutputFacts: specialized.facts,
+        callOutputOverrideIds: specialized.overrideIds,
+        callOutputLabels: specialized.labels,
+        callSpecializationTargets: specialized.specializedTargets,
+        loadedTargets,
+      };
+    },
+    specialization: (target, call, graph, staticSwitchOverrides = new Map()) =>
+      specializationForCall(
+        target,
+        call,
+        graph,
+        validDefinitions.get(target),
+        outputFacts,
+        staticSwitchOverrides,
+      ),
     expand,
   };
 }

@@ -5,6 +5,7 @@ import {
   ALL_OUTPUTS_ID,
   createAnalysisWorkspace,
 } from "../src/analyze";
+import { functionOutputId } from "../src/pseudo-hlsl/generate";
 import { parseClipboard } from "../src/clipboard/parser";
 import { compileFunctionLibrary } from "../src/functions/library";
 import { resolveGraph } from "../src/graph/resolve";
@@ -185,6 +186,7 @@ describe("Function Definition Library", () => {
       status: "defined",
       callCount: 1,
     });
+    expect(result.functionTree[0].outputs[0].id).toBe(functionOutputId(TARGET, OUTPUT_ID));
     expect(result.code).toContain("// Material Function definitions");
     expect(result.code).toContain("float MF_Value()");
     expect(result.code).toContain("return");
@@ -584,14 +586,14 @@ describe("Function Definition Library", () => {
       "End Object",
       'CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD,PinName="Output",Direction="EGPD_Output",LinkedTo=(Switch EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE1))',
       "End Object",
-      ...[["A", "1.0", "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE2"],
+      ...[["A", "float3(1.0, 2.0, 3.0)", "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE2"],
         ["B", "2.0", "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE3"]]
         .flatMap(([name, value, switchPin], index) => [
           `Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="${name}"`,
-          `Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="${name}Expression"`,
+          `Begin Object Class=/Script/Engine.MaterialExpression${index ? "Constant" : "Constant3Vector"} Name="${name}Expression"`,
           "End Object",
           `Begin Object Name="${name}Expression"`,
-          `R=${value}`,
+          index ? `R=${value}` : "Constant=(R=1.0,G=2.0,B=3.0)",
           "End Object",
           `CustomProperties Pin (PinId=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF${index + 1},PinName="Output",Direction="EGPD_Output",LinkedTo=(Switch ${switchPin}))`,
           "End Object",
@@ -620,11 +622,12 @@ describe("Function Definition Library", () => {
     const initial = workspace.analyze();
     const control = initial.functionTree[0].staticSwitches[0];
 
-    expect(control.id).toContain("::group:1::");
+    expect(control.id).toContain(`${inputId}=true`);
     expect(control).toMatchObject({ value: true, resolved: true });
+    expect(initial.code).toContain("float3 Result = MF_Switch__Use_A_True(");
     expect(workspace.analyze({
       staticSwitchOverrides: new Map([[control.id, false]]),
-    }).code).toContain("MF_Switch(false)");
+    }).code).toContain("float Result = MF_Switch__Use_A_False(");
     expect(workspace.analyze({
       functionMode: "inline",
       staticSwitchOverrides: new Map([[control.id, false]]),
