@@ -483,15 +483,15 @@ function renderMaterialFunctions(result: AnalysisResult): void {
       });
       const paste = document.createElement("button");
       paste.type = "button";
-      paste.textContent = node.status === "defined" ? "Replace" : "Paste definition";
+      paste.textContent = node.status === "defined" ? "Replace" : "Paste";
       paste.addEventListener("click", () => void pasteFunctionDefinition(node.target));
-      actions.append(mode);
+      actions.append(mode, paste);
+      let remove: HTMLButtonElement | undefined;
       if (node.status === "defined") {
-        const remove = document.createElement("button");
+        remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "Remove";
         remove.addEventListener("click", () => removeFunctionDefinition(node.target));
-        actions.append(remove);
       }
       heading.append(title, actions);
       const pasteFallback = document.createElement("textarea");
@@ -510,7 +510,8 @@ function renderMaterialFunctions(result: AnalysisResult): void {
       });
       const pasteRow = document.createElement("div");
       pasteRow.className = "function-definition-paste-row";
-      pasteRow.append(pasteFallback, paste);
+      pasteRow.append(pasteFallback);
+      if (remove) pasteRow.append(remove);
       card.append(heading, pasteRow);
 
       if (node.error) {
