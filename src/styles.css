@@ -259,12 +259,13 @@ pre {
   padding: .875rem 1rem;
   overflow-y: auto;
 }
-#code .line-numbers { padding-left: 4rem; }
-.code-line { position: relative; display: block; min-height: 1.55em; }
+#code .line-numbers { display: block; padding-left: 2.75rem; }
+.code-line { position: relative; }
 #code .line-numbers .code-line::before {
   position: absolute;
-  right: calc(100% + .75rem);
-  min-width: 2.25rem;
+  top: 0;
+  left: -2.5rem;
+  width: 2rem;
   color: var(--muted);
   content: attr(data-line);
   text-align: right;

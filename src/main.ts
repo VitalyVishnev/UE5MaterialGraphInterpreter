@@ -280,9 +280,10 @@ function renderCode(result: AnalysisResult): void {
       cursor = index + token.length;
       if (token.startsWith("//")) break;
     }
-    lineElement.append(document.createTextNode(line.slice(cursor)));
+    lineElement.append(document.createTextNode(
+      line.slice(cursor) + (lineIndex < lines.length - 1 ? "\n" : ""),
+    ));
     fragment.append(lineElement);
-    if (lineIndex < lines.length - 1) fragment.append(document.createTextNode("\n"));
   }
   code.replaceChildren(fragment);
   updateCodeSearch();

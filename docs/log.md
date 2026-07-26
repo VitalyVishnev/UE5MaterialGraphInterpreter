@@ -375,4 +375,4 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 ## 2026-07-26 - Code-panel navigation and symmetric resizing
 
 - Constrained both workspace side panes from one width budget so dragging Code Settings wide cannot collapse Clipboard/Graph Inspector or distort resize handles.
-- Added optional logical line numbers and an always-visible compact pseudo-HLSL search field with `Ctrl+F`, match count, highlights, and previous/next navigation.
+- Added optional logical line numbers in a stable left gutter for every generated line, including blanks, and an always-visible compact pseudo-HLSL search field with `Ctrl+F`, match count, highlights, and previous/next navigation.
