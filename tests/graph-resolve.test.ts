@@ -6,7 +6,7 @@ import { parseClipboard } from "../src/clipboard/parser";
 import { resolveGraph } from "../src/graph/resolve";
 
 const sampleIt = existsSync(resolve("samples")) ? it : it.skip;
-import { assignCommentRegions } from "../src/graph/resolve-comment-regions";
+import { assignCommentRegions, orderNodesByCommentRegions } from "../src/graph/resolve-comment-regions";
 import { sliceOutput } from "../src/graph/slice";
 import type { GraphNode, MaterialGraph } from "../src/graph/types";
 
@@ -342,5 +342,40 @@ End Object
       "Outer stage",
       "Inner detail",
     ]);
+  });
+
+  it("keeps a ready comment region together without moving dependencies", () => {
+    const node = (id: string, links: string[] = [], region?: string): GraphNode => ({
+      id,
+      expressionClass: "MaterialExpressionAdd",
+      kind: "expression",
+      properties: new Map(),
+      pins: [
+        ...links.map((sourceId, index) => ({
+          id: `${id}-in-${index}`,
+          name: "A",
+          direction: "input" as const,
+          links: [{ nodeId: sourceId, pinId: `${sourceId}-out` }],
+        })),
+        { id: `${id}-out`, name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+      commentRegions: region ? [{ id: region, text: region }] : undefined,
+    });
+    const graph: MaterialGraph = {
+      nodes: new Map([
+        node("Input"),
+        node("DerivativeA", ["Input"], "Derivatives"),
+        node("Coordinates", ["DerivativeA"], "Coordinates"),
+        node("DerivativeB", ["Input"], "Derivatives"),
+      ].map((item) => [item.id, item])),
+      outputs: [],
+      diagnostics: [],
+    };
+
+    expect(orderNodesByCommentRegions(
+      graph,
+      ["Input", "DerivativeA", "Coordinates", "DerivativeB"],
+    )).toEqual(["Input", "DerivativeA", "DerivativeB", "Coordinates"]);
   });
 });

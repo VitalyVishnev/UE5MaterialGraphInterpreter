@@ -18,6 +18,7 @@ import {
   equivalentExpressionInputs,
   fixedExpressionInputType,
   fixedExpressionOutputType,
+  implicitExpressionInput,
   mathInputDefault,
   mathInputNames,
   mathExpression,
@@ -199,9 +200,9 @@ export function inferTypes(
     if (link) return facts.get(key(link.nodeId, link.pinId));
     const property = semantics ? mathInputDefault(semantics, inputName) : undefined;
     const value = pin?.defaultValue ?? (property ? node.properties.get(property) : undefined);
-    return value !== undefined && Number.isFinite(Number(value))
-      ? { type: "float", confidence: "confirmed" }
-      : undefined;
+    if (value !== undefined && Number.isFinite(Number(value))) return { type: "float", confidence: "confirmed" };
+    const implicit = implicitExpressionInput(node, inputName);
+    return implicit ? mathInputFact(node, implicit) : undefined;
   };
 
   for (const node of orderedNodes) {

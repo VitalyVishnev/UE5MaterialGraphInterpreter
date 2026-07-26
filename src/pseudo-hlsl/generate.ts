@@ -3,6 +3,7 @@ import {
   advancedExpression,
   convertExpressionLayout,
   fixedExpressionOutputType,
+  implicitExpressionInput,
   inputDataExpression,
   knownMaterialFunctionOutputType,
   mathExpression,
@@ -23,6 +24,7 @@ import {
   type StaticSwitchControl,
   type StaticSwitchOverrides,
 } from "../graph/slice";
+import { orderNodesByCommentRegions } from "../graph/resolve-comment-regions";
 import type {
   GraphCommentRegion,
   GraphNode,
@@ -385,6 +387,7 @@ function renderDeclarations(declarations: Declaration[]): string[] {
     }
   }
   let activeLargeRegions: readonly GraphCommentRegion[] = [];
+  const seenLargeRegions = new Set<string>();
   let outputsStarted = false;
   const separator = "//---------------------------------------------------";
   for (const declaration of body) {
@@ -401,7 +404,11 @@ function renderDeclarations(declarations: Declaration[]): string[] {
       && activeLargeRegions[sharedDepth].id === largeRegions[sharedDepth].id) sharedDepth += 1;
     for (const region of largeRegions.slice(sharedDepth)) {
       if (lines.length > 0 && lines.at(-1) !== "") lines.push("");
-      lines.push(separator, `// ${region.text}`, separator);
+      if (seenLargeRegions.has(region.id)) lines.push(`// ${region.text} (continued)`);
+      else {
+        lines.push(separator, `// ${region.text}`, separator);
+        seenLargeRegions.add(region.id);
+      }
     }
     activeLargeRegions = largeRegions;
     if (declaration.spaced && lines.length > 0 && lines.at(-1) !== "") lines.push("");
@@ -432,7 +439,10 @@ function generatePseudoHlslForOutputs(
     staticSwitchOverrides,
     functionKnowledge?.preserveStaticSwitches,
   );
-  const orderedNodes = slice.orderedNodeIds.map((nodeId) => graph.nodes.get(nodeId)!);
+  const presentationOrder = options.commentSections
+    ? orderNodesByCommentRegions(graph, slice.orderedNodeIds)
+    : slice.orderedNodeIds;
+  const orderedNodes = presentationOrder.map((nodeId) => graph.nodes.get(nodeId)!);
   const commentRegionNodeCounts = new Map<string, number>();
   for (const node of graph.nodes.values()) {
     if (node.expressionClass === "MaterialExpressionComment") continue;
@@ -1012,6 +1022,15 @@ function generatePseudoHlslForOutputs(
             mathInputNames(semantics, name),
             mathInputDefault(semantics, name),
           ));
+          for (const [index, name] of inputNames.entries()) {
+            const pin = pinByName(node, ...mathInputNames(semantics, name));
+            const implicit = !pin?.links.length && pin?.defaultValue === undefined
+              ? implicitExpressionInput(node, name)
+              : undefined;
+            if (!implicit) continue;
+            const sourceIndex = inputNames.indexOf(implicit);
+            if (sourceIndex >= 0) args[index] = args[sourceIndex];
+          }
           if (className === "MaterialExpressionFloatToUInt" && node.properties.has("Mode")) {
             args.push({ code: identifier(node.properties.get("Mode")!), type: "unknown" });
           }

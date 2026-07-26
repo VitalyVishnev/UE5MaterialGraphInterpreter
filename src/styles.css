@@ -266,14 +266,13 @@ pre {
 .function-heading { padding: 10px 13px 6px 15px; }
 .function-heading strong { font-size: .86rem; }
 .function-definition-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  display: grid;
+  gap: 7px;
 }
 .function-definition-heading > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.function-definition-heading strong { overflow-wrap: anywhere; }
 .function-state { color: var(--muted); font-size: .68rem; }
-.function-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.function-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 5px; }
 .function-actions select { width: auto; max-width: 94px; padding: 5px 22px 5px 7px; font-size: .72rem; }
 .function-actions button { padding: 5px 7px; font-size: .7rem; }
 .function-definition-paste-row {
@@ -318,13 +317,15 @@ pre {
 }
 .function-output {
   display: grid;
-  grid-template-columns: minmax(80px, 1fr) minmax(150px, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 1.35fr);
   align-items: center;
   gap: 10px;
   padding: 6px 13px 10px 15px;
   color: var(--muted);
   font-size: .8rem;
 }
+.function-output-control { display: grid; gap: 4px; min-width: 0; }
+.function-output-hint { color: var(--error); font-size: .67rem; line-height: 1.2; }
 .type-select { width: 100%; max-width: none; min-height: 34px; font-size: .78rem; }
 .type-select.unknown { color: var(--error); border-color: var(--error); }
 .type-select.inferred,

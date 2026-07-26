@@ -20,6 +20,7 @@ export interface FunctionValueSummary {
   name: string;
   type?: MaterialType;
   confidence?: InferredType["confidence"];
+  unresolvedDependencies?: string[];
 }
 
 export interface FunctionDependencyNode {
@@ -506,11 +507,24 @@ export function compileFunctionLibrary(
           error: definition?.error,
           outputs: expected.outputs.map((output, index) => {
             const fact = outputFacts.get(functionOutputId(target, index));
+            const definitionGraph = valid && definition ? definition.graph : undefined;
+            const graphOutput = definitionGraph && definition ? definitionOutput(definition, output.id) : undefined;
+            const unresolvedDependencies = graphOutput && definitionGraph
+              ? [...new Set(
+                  sliceOutputs(definitionGraph, [graphOutput.id]).orderedNodeIds
+                    .map((nodeId) => definitionGraph.nodes.get(nodeId))
+                    .filter((node): node is GraphNode => node?.kind === "external-call")
+                    .map(targetOf)
+                    .filter((nestedTarget) => !parsedDefinitions.get(nestedTarget)?.valid)
+                    .map(materialFunctionName),
+                )]
+              : [];
             return {
               id: functionOutputId(target, index),
               name: output.name,
               type: fact?.type,
               confidence: fact?.confidence,
+              unresolvedDependencies,
             };
           }),
           staticSwitches,

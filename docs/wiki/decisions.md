@@ -316,6 +316,8 @@ Local Comment Region naming has lower priority than Function Input and Parameter
 
 Hoist Function Inputs and direct aliases of Function Inputs into one preamble so data-flow transitions do not repeat large section headers. Preserve dependency order for all computed declarations.
 
+Treat each innermost multi-statement Comment Region as a soft presentation block. After its external dependencies are emitted, print its internally-ready declarations together before selecting unrelated ready nodes. Never move a declaration before an upstream dependency. If a genuine dependency crossing still requires returning to a previously rendered region, use one compact `// Comment Name (continued)` annotation rather than a second full separator.
+
 Keep structured call and top-level operator metadata through translation. The `Wrap complex calls and formulas` option renders standalone calls with at least three arguments one argument per line and splits long nested binary formulas at their top-level operator. The independent `Space out complex operations` option adds blank-line separation around those declarations and expanded Custom HLSL blocks. Simple arithmetic stays compact. Calls embedded inside arithmetic remain inline.
 
 Keep `Simplify algebra` disabled by default so pseudo-HLSL mirrors authored graph operations. When enabled, fold finite local scalar `+`, `-`, `*`, and `/` constants and remove only neutral `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`, and `x / 1` operations. Do not collapse `x * 0`, `0 / x`, `x / x`, or division by zero because `NaN`, infinity, signed zero, and domain behaviour can make them observably different.

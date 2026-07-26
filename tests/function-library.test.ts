@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ALL_OUTPUTS_ID,
@@ -6,6 +8,8 @@ import {
 import { parseClipboard } from "../src/clipboard/parser";
 import { compileFunctionLibrary } from "../src/functions/library";
 import { resolveGraph } from "../src/graph/resolve";
+
+const sampleIt = existsSync(resolve("samples")) ? it : it.skip;
 
 const TARGET = "MaterialFunction'\"/Project/MF_Value.MF_Value\"'";
 const OUTPUT_ID = "11111111111111111111111111111111";
@@ -140,6 +144,35 @@ function cyclicNestedDefinition(): string {
 }
 
 describe("Function Definition Library", () => {
+  sampleIt("derives UV outputs through the loaded MF_Rotate2D dependency", () => {
+    const sample = "samples/MF_ResolveCoordinateFrame_Biplanar_Dither";
+    const definitionSources = new Map([
+      ["/Script/Engine.MaterialFunction'/BaseMaterial/Materials/Functions/MF_Coordinate_Biplanar.MF_Coordinate_Biplanar'", "01_MF_Coordinate_Biplanar/MF_Coordinate_Biplanar_clipboard.txt"],
+      ["/Script/Engine.MaterialFunction'/BaseMaterial/Materials/Functions/MF_Rotate2D.MF_Rotate2D'", "02_MF_Rotate2D/MF_Rotate2D_clipboard.txt"],
+    ].map(([target, path]) => [target, readFileSync(resolve(sample, "functions", path), "utf8")]));
+    const root = readFileSync(resolve(sample, "MF_ResolveCoordinateFrame_Biplanar_Dither_full_clipboard.txt"), "utf8");
+    const result = createAnalysisWorkspace(root, definitionSources).analyze();
+    const find = (nodes: typeof result.functionTree): typeof result.functionTree[number] | undefined => {
+      for (const node of nodes) {
+        if (node.name === "MF_Coordinate_Biplanar") return node;
+        const child = find(node.children);
+        if (child) return child;
+      }
+      return undefined;
+    };
+
+    expect(find(result.functionTree)?.outputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "UV1", type: "float2" }),
+      expect.objectContaining({ name: "UV2", type: "float2" }),
+    ]));
+    const incomplete = createAnalysisWorkspace(
+      root,
+      new Map([[...definitionSources][0]]),
+    ).analyze();
+    const missingUV1 = find(incomplete.functionTree)?.outputs.find(({ name }) => name === "UV1");
+    expect(missingUV1?.unresolvedDependencies).toEqual(["MF_Rotate2D"]);
+  });
+
   it("validates exact output IDs and renders a reachable helper", () => {
     const workspace = createAnalysisWorkspace(
       rootClipboard(),

@@ -323,3 +323,15 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 
 - Extended the local sample-capture helper with an unlimited flat list of auxiliary Material Function clipboard definitions, each with an optional identity and description.
 - Save definitions under `functions/<ordered-name>/` beside the root sample and write `function-definitions.txt` as a readable index; clipboard asset paths retain the actual dependency tree.
+
+## 2026-07-26 - Implicit `If` equality branch
+
+- Recorded and implemented Unreal's `A == B` fallback to `A > B` when the optional equality branch is unconnected.
+- This keeps complete `If` outputs confirmed and prevents fabricated `external_*_A_Equal_B` values in loaded `MF_Switch4_Vec3` and `MF_Blend_RGBToIndex` definitions.
+## 2026-07-26 - Dependency-safe Comment Region ordering
+
+- Made Unreal Comment Regions dependency-safe presentation blocks: ready declarations from the same innermost large region stay contiguous, while unavoidable re-entry uses a compact continuation label instead of repeating the full section header.
+
+## 2026-07-26 - Output-specific missing Function guidance
+
+- Material Function output cards now identify the exact missing or invalid nested function needed to resolve that output's type, instead of implying that every unresolved type has the same cause.

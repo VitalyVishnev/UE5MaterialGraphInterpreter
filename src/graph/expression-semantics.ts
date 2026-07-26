@@ -754,6 +754,13 @@ export function branchExpressionInputs(node: GraphNode): readonly string[] {
   return [];
 }
 
+/** Unreal's AEqualsB pin falls back to AGreaterThanB when it is unconnected. */
+export function implicitExpressionInput(node: GraphNode, inputName: string): string | undefined {
+  return node.expressionClass === "MaterialExpressionIf" && inputName === "A == B"
+    ? "A > B"
+    : undefined;
+}
+
 export function fixedExpressionInputType(
   node: GraphNode,
   pin: GraphPin,

@@ -24,6 +24,7 @@ describe("type inference", () => {
     branchClasses: readonly string[],
     selectedStaticBranch?: boolean,
     expressionClass?: string,
+    implicitEqualFallback = false,
   ) => {
     const branches = branchClasses.map((expressionClass, index) =>
       node(`Branch${index}`, expressionClass, [{
@@ -45,7 +46,7 @@ describe("type inference", () => {
         id: `value-${index}`,
         name,
         direction: "input" as const,
-        links: index < branches.length
+        links: !(implicitEqualFallback && name === "A == B") && index < branches.length
           ? [{ nodeId: `Branch${index}`, pinId: `branch-${index}-out` }]
           : [],
       })),
@@ -98,6 +99,19 @@ describe("type inference", () => {
     expect(incomplete.facts.get("If:if-out")).toEqual({
       type: "float3",
       confidence: "inferred",
+    });
+  });
+
+  it("uses Unreal's implicit A == B fallback when the pin is unconnected", () => {
+    const result = branchResult([
+      "MaterialExpressionConstant3Vector",
+      "MaterialExpressionConstant",
+      "MaterialExpressionConstant3Vector",
+    ], undefined, undefined, true);
+
+    expect(result.facts.get("If:if-out")).toEqual({
+      type: "float3",
+      confidence: "confirmed",
     });
   });
 

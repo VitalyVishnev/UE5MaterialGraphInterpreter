@@ -535,7 +535,18 @@ function renderMaterialFunctions(result: AnalysisResult): void {
           setTypeOverride(output.id, select.value as MaterialType | "");
           reanalyzeAccepted();
         });
-        row.append(label, select);
+        const control = document.createElement("div");
+        control.className = "function-output-control";
+        control.append(select);
+        if (output.status === "unknown" && summary.unresolvedDependencies?.length) {
+          const hint = document.createElement("small");
+          hint.className = "function-output-hint";
+          const names = summary.unresolvedDependencies.join(", ");
+          hint.textContent = `Needs ${names} — paste its definition below.`;
+          hint.title = "This output depends on a nested Material Function whose definition is missing or invalid.";
+          control.append(hint);
+        }
+        row.append(label, control);
         card.append(row);
       }
 
