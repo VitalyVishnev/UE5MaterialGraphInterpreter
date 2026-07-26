@@ -84,7 +84,7 @@ Reasoning:
 The copied graph does not provide sufficient evidence to safely reconstruct every external dependency or engine-specific symbol.
 
 Consequences:
-The generator emits readable calls such as `Pi(2.0)` and `MakeFloat3(x, y, z)` while identifying their full asset paths in warnings. Known standard operations such as Unreal `Cosine` and `Sine` map directly to `cos` and `sin` without unsupported-node warnings. A Custom output is always obtained from its serialized `OutputType` or Unreal's omitted-property default (`float3` for the main output, scalar for an additional output), so it is not user-editable. Only Custom inputs without an exact graph-derived type appear in Type Overrides; a known upstream value, including another Custom output, propagates automatically. Disconnected Custom Nodes remain ignored.
+The generator emits readable calls such as `Pi(2.0)` and `MakeFloat3(x, y, z)` while identifying their full asset paths in warnings. Unreal `Sine`, `Cosine`, and `Tangent` remain supported calls, but their cycle-domain input is explicitly converted to HLSL radians as `(Input / Period) * 6.2831853`; the code header explains this UE-specific form. A Custom output is always obtained from its serialized `OutputType` or Unreal's omitted-property default (`float3` for the main output, scalar for an additional output), so it is not user-editable. Only Custom inputs without an exact graph-derived type appear in Type Overrides; a known upstream value, including another Custom output, propagates automatically. Disconnected Custom Nodes remain ignored.
 
 Related files:
 

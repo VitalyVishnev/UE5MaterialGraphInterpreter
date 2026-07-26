@@ -22,7 +22,7 @@ This registry covers all 51 unique `MaterialExpression` classes in the supplied 
 | `Ceil` | `ceil(Input)` | `T(Input)` |
 | `Clamp` | `clamp(Input, Min, Max)` | `T(Input)`; ClampMin/ClampMax become `max`/`min` |
 | `ComponentMask` | `Input.rgba-mask` | float width equals selected channel count |
-| `Cosine` | `cos(Input / Period)` | `T(Input)`; `/ Period` omitted when Period is 1 |
+| `Cosine` | `cos((Input / Period) * 6.2831853)` | `T(Input)`; UE cycle input becomes HLSL radians; `/ Period` omitted when Period is 1 |
 | `CrossProduct` | `cross(A, B)` | `float3` |
 | `Divide` | `A / B` | `promote(A, B)` |
 | `DotProduct` | `dot(A, B)` | `float` |
@@ -50,13 +50,13 @@ This registry covers all 51 unique `MaterialExpression` classes in the supplied 
 | `Round` | `round(Input)` | `T(Input)` |
 | `Saturate` | `saturate(Input)` | `T(Input)` |
 | `Sign` | `sign(Input)` | `T(Input)` |
-| `Sine` | `sin(Input / Period)` | `T(Input)`; `/ Period` omitted when Period is 1 |
+| `Sine` | `sin((Input / Period) * 6.2831853)` | `T(Input)`; UE cycle input becomes HLSL radians; `/ Period` omitted when Period is 1 |
 | `SmoothStep` | `smoothstep(Min, Max, Value)` | `T(Value)` |
 | `SquareRoot` | `sqrt(Input)` | `T(Input)` |
 | `Step` | `step(Y, X)` | `T(X)` |
 | `Subtract` | `A - B` | `promote(A, B)` |
 | `Switch` | `Switch(SwitchValue, Default, Inputs...)` | common branch type |
-| `Tangent` | `tan(Input / Period)` | `T(Input)`; `/ Period` omitted when Period is 1 |
+| `Tangent` | `tan((Input / Period) * 6.2831853)` | `T(Input)`; UE cycle input becomes HLSL radians; `/ Period` omitted when Period is 1 |
 | `Truncate` | `trunc(Input)` | `T(Input)` |
 | `UIntToFloat` | `UIntToFloat(Input)` | `float`; input is `uint` |
 

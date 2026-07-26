@@ -342,3 +342,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Renamed the mixed Diagnostics surface to Graph Inspector.
 - Added constrained column and row separators with default snapping, keyboard control, double-click reset, refresh persistence, and a non-resizable stacked narrow-screen layout.
 - Polished the implementation by making JavaScript use the same viewport breakpoint as CSS and removing obsolete layout selectors.
+
+## 2026-07-26 - Unreal periodic trigonometry
+
+- Corrected `Sine`, `Cosine`, and `Tangent`: Unreal supplies cycle-domain input, so generated pseudo-HLSL now converts it to radians with `2 * PI * Input / Period` before calling the HLSL intrinsic.
+- Added one concise code-header note whenever an analyzed slice contains one of those nodes.

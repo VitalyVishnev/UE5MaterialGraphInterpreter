@@ -563,15 +563,16 @@ function generatePseudoHlslForOutputs(
   const input = (node: GraphNode, names: readonly string[], fallbackProperty?: string): Value =>
     linkedValue(node, pinByName(node, ...names), fallbackProperty);
 
-  const periodicArgument = (node: GraphNode): Value => {
+  const periodicRadians = (node: GraphNode): Value => {
     const value = input(node, ["Input"]);
     const periodPin = pinByName(node, "Period");
     const serializedPeriod = node.properties.get("Period") ?? periodPin?.defaultValue;
     const hasCustomPeriod = Boolean(periodPin?.links.length)
       || (serializedPeriod !== undefined && Number(serializedPeriod) !== 1);
-    if (!hasCustomPeriod) return value;
-    const period = linkedValue(node, periodPin, "Period");
-    return { code: `(${value.code} / ${period.code})`, type: value.type };
+    const cycles = hasCustomPeriod
+      ? `(${value.code} / ${linkedValue(node, periodPin, "Period").code})`
+      : value.code;
+    return { code: `${cycles} * 6.2831853`, type: value.type };
   };
 
   const translate = (node: GraphNode, sourcePin: GraphPin): Value => {
@@ -641,15 +642,15 @@ function generatePseudoHlslForOutputs(
         return { code: `(1.0 - ${value.code})`, type: value.type };
       }
       case "MaterialExpressionCosine": {
-        const value = periodicArgument(node);
+        const value = periodicRadians(node);
         return { code: `cos(${value.code})`, type: value.type };
       }
       case "MaterialExpressionSine": {
-        const value = periodicArgument(node);
+        const value = periodicRadians(node);
         return { code: `sin(${value.code})`, type: value.type };
       }
       case "MaterialExpressionTangent": {
-        const value = periodicArgument(node);
+        const value = periodicRadians(node);
         return { code: `tan(${value.code})`, type: value.type };
       }
       case "MaterialExpressionClamp": {
@@ -1366,10 +1367,15 @@ function generatePseudoHlslForOutputs(
   const warningLines = [...new Set(diagnostics
     .filter((diagnostic) => diagnostic.severity !== "info")
     .map((diagnostic) => `// ${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`))];
+  const usesPeriodicTrig = orderedNodes.some((node) =>
+    /MaterialExpression(?:Sine|Cosine|Tangent)$/.test(node.expressionClass));
   const codeLines = [
     "// Pseudo-HLSL: semantic approximation of the connected Unreal graph.",
     ...warningLines,
     ...(warningLines.length ? [""] : []),
+    ...(usesPeriodicTrig
+      ? ["// Unreal periodic trig nodes use cycle-domain inputs; converted to HLSL radians (2 * PI * Input / Period).", ""]
+      : []),
     ...renderDeclarations(declarations),
     ...bundleLines,
   ];

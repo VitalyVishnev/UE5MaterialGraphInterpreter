@@ -112,6 +112,54 @@ describe("generatePseudoHlsl", () => {
     expect(result.code).not.toContain("Convert(");
   });
 
+  it("converts Unreal periodic trig inputs to HLSL radians", () => {
+    const input: GraphNode = {
+      id: "Input",
+      expressionClass: "MaterialExpressionFunctionInput",
+      kind: "function-input",
+      properties: new Map([["InputType", "FunctionInput_Scalar"]]),
+      pins: [{ id: "InputOut", name: "Output", direction: "output", links: [] }],
+      startLine: 1,
+      displayName: "Phase",
+    };
+    const sine: GraphNode = {
+      id: "Sine",
+      expressionClass: "MaterialExpressionSine",
+      kind: "expression",
+      properties: new Map(),
+      pins: [
+        { id: "SineIn", name: "Input", direction: "input", links: [{ nodeId: "Input", pinId: "InputOut" }] },
+        { id: "SinePeriod", name: "Period", direction: "input", defaultValue: "2.0", links: [] },
+        { id: "SineOut", name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    };
+    const output: GraphNode = {
+      id: "Output",
+      expressionClass: "MaterialExpressionFunctionOutput",
+      kind: "function-output",
+      properties: new Map([["OutputName", "Wave"]]),
+      pins: [],
+      startLine: 1,
+    };
+    const graph: MaterialGraph = {
+      nodes: new Map([input, sine, output].map((item) => [item.id, item])),
+      outputs: [{
+        id: "Output:Input",
+        label: "Wave",
+        ownerNodeId: "Output",
+        ownerPinId: "OutputIn",
+        sourceNodeId: "Sine",
+        sourcePinId: "SineOut",
+      }],
+      diagnostics: [],
+    };
+
+    const result = generatePseudoHlsl(graph, graph.outputs[0].id);
+    expect(result.code).toContain("sin((Phase / 2.0) * 6.2831853)");
+    expect(result.code).toContain("// Unreal periodic trig nodes use cycle-domain inputs; converted to HLSL radians (2 * PI * Input / Period).");
+  });
+
   it("inlines a repeated single-component Convert projection", () => {
     const source: GraphNode = {
       id: "Source",
@@ -481,8 +529,9 @@ End Object`;
     const result = analyzeClipboard(source);
 
     expect(result.code).toContain("Pi(2.0)");
-    expect(result.code).toContain("cos(add)");
-    expect(result.code).toContain("sin(add)");
+    expect(result.code).toContain("cos(add * 6.2831853)");
+    expect(result.code).toContain("sin(add * 6.2831853)");
+    expect(result.code).toContain("// Unreal periodic trig nodes use cycle-domain inputs; converted to HLSL radians (2 * PI * Input / Period).");
     expect(result.code).toContain("MakeFloat3(");
     expect(result.code).not.toContain("UE_MaterialFunction");
     expect(result.code).not.toContain("UE_Unsupported");
