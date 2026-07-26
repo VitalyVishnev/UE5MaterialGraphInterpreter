@@ -222,7 +222,7 @@ The graph often provides only an inferred type, or no type, for an external Mate
 Decision:
 Show one editable entry per unique Material Function path, never one per call node. List its outputs with an automatic inferred/minimum/unknown state and a dropdown containing the supported material type vocabulary. A manual selection is authoritative for the current clipboard and applies to every call with the same function path and output index. Re-run analysis immediately after each selection.
 
-Sort functions with unknown outputs first, inferred/minimum outputs second, and overridden functions last; sort alphabetically within each group. Keep parser line numbers internally but do not display them in the Diagnostics UI because clipboard text is not a user-facing source listing. Group repeated orphan text, unresolved links, and unresolved Named Reroutes by diagnostic kind and show their occurrence count instead of flooding the panel with per-pin messages.
+Sort functions with unknown outputs first, inferred/minimum outputs second, and overridden functions last; sort alphabetically within each group. Keep parser line numbers internally but do not display them in the Graph Inspector because clipboard text is not a user-facing source listing. Group repeated orphan text, unresolved links, and unresolved Named Reroutes by diagnostic kind and show their occurrence count instead of flooding the panel with per-pin messages.
 
 Reasoning:
 Function signatures belong to the function asset rather than individual call nodes. Grouping avoids duplicate `Pi` entries and makes one user correction update the entire generated program.
@@ -272,7 +272,9 @@ Context:
 The Unreal clipboard is machine input, not a useful reading surface. Giving it equal visual weight to generated pseudo-HLSL made the primary review workflow harder to scan.
 
 Decision:
-Use a centered, bounded two-column workspace. The compact Clipboard input sits above a combined Diagnostics and external-function panel in the narrow left column. The pseudo-HLSL panel spans the full workspace height in the wider right column. Each content area scrolls internally. On narrow screens, stack Clipboard, pseudo-HLSL, then Diagnostics. Offer a native `Paste clipboard` action in addition to ordinary paste; analyze either path immediately.
+Use a centered, bounded three-column workspace. The compact Clipboard input sits above the Graph Inspector in the left column, pseudo-HLSL occupies the primary center column, and Output, Copy, and Formatting controls live in a dedicated right column. Keep the type-confidence legend above pseudo-HLSL.
+
+Expose the two vertical seams and the row seam between Clipboard and Graph Inspector as draggable separators. Resizing one panel redistributes the existing workspace rather than creating gaps. Constrain usable minimum sizes, snap a separator when it approaches its computed default, persist custom dimensions in `sessionStorage`, and restore one separator to default on double-click. Keyboard arrows resize a focused separator. On screens below `900px`, stack Clipboard, pseudo-HLSL, Code Settings, then Graph Inspector and hide the separators. Offer a native `Paste clipboard` action in addition to ordinary paste; analyze either path immediately.
 
 Use CSS logical units (`rem`, CSS pixels, `clamp()`, `dvh`) rather than reading physical device pixels in JavaScript. Scale root typography modestly with viewport width and preserve quiet side margins on large displays.
 
@@ -280,11 +282,12 @@ Reasoning:
 Browsers already map OS DPI scaling to CSS logical pixels. Manual device-pixel calculations would double-apply scaling and behave inconsistently with browser zoom.
 
 Validation:
-Verified the centered two-column hierarchy in the active desktop browser. The stacked reading order is defined below the `820px` breakpoint and remains covered by the production CSS build.
+Verified all three drag directions, default snapping, double-click reset, refresh persistence, and the stacked `800px` layout in the active desktop browser. The production build covers the same CSS and TypeScript implementation.
 
 Related files:
 
 - `index.html`
+- `src/resizable-layout.ts`
 - `src/styles.css`
 
 ## Decision: Preserve graph comment regions in readable pseudo-HLSL

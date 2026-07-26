@@ -335,3 +335,10 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 ## 2026-07-26 - Output-specific missing Function guidance
 
 - Material Function output cards now identify the exact missing or invalid nested function needed to resolve that output's type, instead of implying that every unresolved type has the same cause.
+
+## 2026-07-26 - Resizable three-column workspace
+
+- Moved Output, Copy, and Formatting controls into a dedicated right Code Settings panel while keeping the type-confidence legend above pseudo-HLSL.
+- Renamed the mixed Diagnostics surface to Graph Inspector.
+- Added constrained column and row separators with default snapping, keyboard control, double-click reset, refresh persistence, and a non-resizable stacked narrow-screen layout.
+- Polished the implementation by making JavaScript use the same viewport breakpoint as CSS and removing obsolete layout selectors.

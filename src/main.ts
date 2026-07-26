@@ -10,6 +10,7 @@ import {
   type FunctionExpansionMode,
   type MaterialType,
 } from "./analyze";
+import { mountResizableWorkspace } from "./resizable-layout";
 import { loadStringMap, persistStringMap } from "./session-storage";
 
 const element = <T extends HTMLElement>(id: string): T => {
@@ -19,6 +20,7 @@ const element = <T extends HTMLElement>(id: string): T => {
 };
 
 const clipboard = element<HTMLTextAreaElement>("clipboard");
+const workspaceElement = element<HTMLElement>("workspace");
 const pasteButton = element<HTMLButtonElement>("paste-clipboard");
 const outputSelect = element<HTMLSelectElement>("output-select");
 const copyButton = element<HTMLButtonElement>("copy-code");
@@ -83,6 +85,8 @@ let functionMode: FunctionExpansionMode = "helpers";
 let allowLargeInline = false;
 let volatileFunctionLibrary = false;
 let codePopoverState: CodePopoverState | undefined;
+
+mountResizableWorkspace(workspaceElement);
 
 function loadNameOverrides(): Map<string, string> {
   return loadStringMap(sessionStorage, nameOverrideStorageKey);

@@ -45,7 +45,7 @@
         <span class="version">V1</span>
       </header>
 
-      <section class="workspace" aria-label="Graph analysis workspace">
+      <section id="workspace" class="workspace" aria-label="Graph analysis workspace">
         <div class="panel input-panel">
           <div class="panel-heading">
             <div>
@@ -58,60 +58,9 @@
           <textarea id="clipboard" spellcheck="false" placeholder="Begin Object Class=/Script/UnrealEd.MaterialGraphNode ..."></textarea>
         </div>
 
-        <div class="panel output-panel">
-          <div class="panel-heading output-controls">
-            <label for="output-select">
-              <span>Output</span>
-              <select id="output-select" disabled>
-                <option>No output detected</option>
-              </select>
-            </label>
-            <button id="copy-code" type="button" disabled>Copy code</button>
-          </div>
-          <details class="format-settings">
-            <summary>Formatting</summary>
-            <div class="settings-grid">
-              <label>
-                <span>All outputs</span>
-                <select id="bundle-format" disabled title="Choose how All outputs is represented: a compact readable bundle or a stricter HLSL-like struct">
-                  <option value="readable" selected>Readable bundle</option>
-                  <option value="strict">Strict HLSL-like struct</option>
-                </select>
-              </label>
-              <label>
-                <span>Material Functions</span>
-                <select id="function-mode" title="Choose how loaded Material Function definitions appear in pseudo-HLSL">
-                  <option value="types">Types only</option>
-                  <option value="helpers" selected>Helper functions</option>
-                  <option value="inline">Inline functions</option>
-                </select>
-              </label>
-              <label class="check-setting" title="Insert section headings from large Unreal graph comment boxes">
-                <input id="show-sections" type="checkbox" checked>
-                <span>Graph comment sections</span>
-              </label>
-              <label class="check-setting" title="Show the complete stored HLSL body of each connected Custom node instead of an opaque function call">
-                <input id="expand-custom-nodes" type="checkbox">
-                <span>Expand Custom nodes</span>
-              </label>
-              <label class="check-setting" title="Wrap standalone calls with three or more arguments and long nested formulas across multiple lines">
-                <input id="wrap-calls" type="checkbox" checked>
-                <span>Wrap complex calls and formulas</span>
-              </label>
-              <label class="check-setting" title="Add blank lines around long formulas and expanded Custom HLSL blocks">
-                <input id="space-operations" type="checkbox" checked>
-                <span>Space out complex operations</span>
-              </label>
-              <label class="check-setting" title="Fold scalar constants and remove neutral +0, -0, *1, and /1 operations">
-                <input id="simplify-algebra" type="checkbox">
-                <span>Simplify algebra</span>
-              </label>
-              <label class="check-setting" title="Color types, keywords, function calls, and identifiers by their pseudo-HLSL role; turn off for neutral white text">
-                <input id="syntax-highlighting" type="checkbox" checked>
-                <span>Syntax highlighting</span>
-              </label>
-            </div>
-          </details>
+        <div class="workspace-resizer row-resizer" data-resize="input" role="separator" aria-label="Resize Clipboard and Graph Inspector" aria-orientation="horizontal" tabindex="0" title="Drag to resize. Double-click to restore the default."></div>
+
+        <div class="panel code-panel">
           <div class="type-legend" aria-label="Type confidence legend">
             <span title="Type is declared or proven by the graph"><code class="token-type">float</code> confirmed</span>
             <span title="Type is inferred from surrounding graph constraints"><code class="token-inferred">?float</code> inferred</span>
@@ -120,9 +69,12 @@
           </div>
           <pre id="code" aria-label="Generated pseudo-HLSL"><code>// Generated pseudo-HLSL will appear here.</code></pre>
         </div>
-        <div class="panel diagnostics-panel">
+
+        <div class="workspace-resizer column-resizer left-resizer" data-resize="left" role="separator" aria-label="Resize left panels and code" aria-orientation="vertical" tabindex="0" title="Drag to resize. Double-click to restore the default."></div>
+
+        <div class="panel inspector-panel">
           <div class="panel-heading">
-            <h2>Diagnostics</h2>
+            <h2>Graph Inspector</h2>
             <span id="diagnostic-count" class="meta">0</span>
           </div>
           <div class="diagnostics-scroll">
@@ -161,6 +113,67 @@
             </ol>
           </div>
         </div>
+
+        <div class="workspace-resizer column-resizer right-resizer" data-resize="right" role="separator" aria-label="Resize code and settings" aria-orientation="vertical" tabindex="0" title="Drag to resize. Double-click to restore the default."></div>
+
+        <aside class="panel settings-panel" aria-label="Code settings">
+          <div class="panel-heading">
+            <h2>Code Settings</h2>
+            <button id="copy-code" type="button" disabled>Copy code</button>
+          </div>
+          <div class="settings-scroll">
+            <label class="output-setting" for="output-select">
+              <span>Output</span>
+              <select id="output-select" disabled>
+                <option>No output detected</option>
+              </select>
+            </label>
+            <details class="format-settings" open>
+              <summary>Formatting</summary>
+              <div class="settings-grid">
+                <label>
+                  <span>All outputs</span>
+                  <select id="bundle-format" disabled title="Choose how All outputs is represented: a compact readable bundle or a stricter HLSL-like struct">
+                    <option value="readable" selected>Readable bundle</option>
+                    <option value="strict">Strict HLSL-like struct</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Material Functions</span>
+                  <select id="function-mode" title="Choose how loaded Material Function definitions appear in pseudo-HLSL">
+                    <option value="types">Types only</option>
+                    <option value="helpers" selected>Helper functions</option>
+                    <option value="inline">Inline functions</option>
+                  </select>
+                </label>
+                <label class="check-setting" title="Insert section headings from large Unreal graph comment boxes">
+                  <input id="show-sections" type="checkbox" checked>
+                  <span>Graph comment sections</span>
+                </label>
+                <label class="check-setting" title="Show the complete stored HLSL body of each connected Custom node instead of an opaque function call">
+                  <input id="expand-custom-nodes" type="checkbox">
+                  <span>Expand Custom nodes</span>
+                </label>
+                <label class="check-setting" title="Wrap standalone calls with three or more arguments and long nested formulas across multiple lines">
+                  <input id="wrap-calls" type="checkbox" checked>
+                  <span>Wrap complex calls and formulas</span>
+                </label>
+                <label class="check-setting" title="Add blank lines around long formulas and expanded Custom HLSL blocks">
+                  <input id="space-operations" type="checkbox" checked>
+                  <span>Space out complex operations</span>
+                </label>
+                <label class="check-setting" title="Fold scalar constants and remove neutral +0, -0, *1, and /1 operations">
+                  <input id="simplify-algebra" type="checkbox">
+                  <span>Simplify algebra</span>
+                </label>
+                <label class="check-setting" title="Color types, keywords, function calls, and identifiers by their pseudo-HLSL role; turn off for neutral white text">
+                  <input id="syntax-highlighting" type="checkbox" checked>
+                  <span>Syntax highlighting</span>
+                </label>
+              </div>
+            </details>
+          </div>
+        </aside>
       </section>
 
       <div class="status-row">
