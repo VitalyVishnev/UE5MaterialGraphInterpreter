@@ -27,6 +27,12 @@
     #status.error { color: #b42318; }
     #status.success { color: #167342; }
     .hint { font-size: .82rem; color: color-mix(in srgb, CanvasText 62%, Canvas); }
+    .function-list { display: grid; gap: 10px; }
+    .function-definition { border: 1px solid color-mix(in srgb, CanvasText 25%, Canvas); border-radius: 6px; padding: 10px; }
+    .function-definition summary { cursor: pointer; font-weight: 600; }
+    .function-definition-content { display: grid; gap: 10px; margin-top: 10px; }
+    .function-definition textarea { min-height: 150px; }
+    .remove-function { margin-left: auto; }
     @media (max-width: 720px) { .grid, .two { grid-template-columns: 1fr; } main { padding: 16px; } }
   </style>
 </head>
@@ -65,6 +71,12 @@
       <label>Ctrl+C из Unreal Engine
         <textarea id="fullClipboard" spellcheck="false" placeholder="Begin Object Class=/Script/UnrealEd.MaterialGraphNode ..."></textarea>
       </label>
+      <section class="function-definition-content">
+        <strong>Вспомогательные Material Functions <span class="hint">(необязательно)</span></strong>
+        <p class="hint">Добавляйте сюда все доступные определения: как вызванные основным графом, так и вызванные друг другом. Список плоский — реальные связи восстанавливаются по asset path внутри Unreal clipboard.</p>
+        <div id="functionList" class="function-list"></div>
+        <div><button id="addFunction" type="button">+ Добавить Material Function</button></div>
+      </section>
       <p class="hint">Из него будут автоматически созданы два синтаксически оборванных варианта: без начала и без конца.</p>
     </fieldset>
 
@@ -112,7 +124,9 @@
       const folderLabel = $("folderLabel");
       const status = $("status");
       const saveButton = $("save");
+      const functionList = $("functionList");
       let destinationDirectory = null;
+      let functionNumber = 0;
 
       function setStatus(message, kind = "") {
         status.textContent = message;
@@ -134,11 +148,59 @@
         return direction === "start" ? lines.slice(amount).join("\n") : lines.slice(0, Math.max(1, lines.length - amount)).join("\n");
       }
 
+      function addFunctionDefinition() {
+        const number = ++functionNumber;
+        const card = document.createElement("details");
+        card.className = "function-definition";
+        card.open = true;
+        card.innerHTML = `
+          <summary>Material Function ${number}</summary>
+          <div class="function-definition-content">
+            <div class="grid two">
+              <label>Название / Unreal asset path
+                <input class="function-name" placeholder="MF_Coordinate_Biplanar или /Game/Functions/MF_Coordinate_Biplanar">
+              </label>
+              <label>Краткое описание
+                <input class="function-description" placeholder="Что делает функция и зачем она нужна этому sample">
+              </label>
+            </div>
+            <label>Clipboard внутреннего графа функции
+              <textarea class="function-clipboard" spellcheck="false" placeholder="Begin Object Class=/Script/UnrealEd.MaterialGraphNode ..."></textarea>
+            </label>
+            <div class="row"><button class="remove-function" type="button">Удалить функцию</button></div>
+          </div>`;
+        card.querySelector(".remove-function").addEventListener("click", () => card.remove());
+        functionList.append(card);
+      }
+
+      function collectFunctionDefinitions() {
+        return [...functionList.querySelectorAll(".function-definition")].flatMap((card, index) => {
+          const name = card.querySelector(".function-name").value.trim();
+          const description = card.querySelector(".function-description").value.trim();
+          const clipboard = card.querySelector(".function-clipboard").value;
+          if (!name && !description && !clipboard.trim()) return [];
+          if (!clipboard.trim()) throw new Error(`Добавьте clipboard для Material Function ${index + 1} или удалите пустую карточку.`);
+          const folder = `${String(index + 1).padStart(2, "0")}_${safeFolderName(name || `material_function_${index + 1}`)}`;
+          const prefix = safeFolderName(name || `material_function_${index + 1}`);
+          return [{ name: name || `Material Function ${index + 1}`, description, folder, files: [
+            { name: `${prefix}_clipboard.txt`, text: clipboard },
+            { name: "info.txt", text: [
+              `Name: ${name || `Material Function ${index + 1}`}`,
+              `Description: ${description || "Unspecified"}`,
+              `Clipboard: ${prefix}_clipboard.txt`,
+              `Lines: ${clipboardLineCount(clipboard)}`,
+              "",
+            ].join("\n") },
+          ] }];
+        });
+      }
+
       function collectFiles() {
         const title = $("title").value.trim();
         const full = $("fullClipboard").value;
         const hasFull = Boolean(full.trim());
         const partials = [...document.querySelectorAll(".partial")].map((field) => field.value).filter((value) => value.trim());
+        const definitions = collectFunctionDefinitions();
         if (!title) throw new Error("Укажите название папки.");
         if (!hasFull && partials.length === 0) throw new Error("Добавьте полный clipboard или хотя бы одну частичную копию.");
 
@@ -150,6 +212,7 @@
           `Source: ${$("source").value.trim() || "Unspecified"}`,
           `Full Clipboard: ${hasFull ? "present" : "absent"}`,
           `Partial Clipboards: ${partials.length}`,
+          `Material Function Definitions: ${definitions.length}`,
           "",
           "Description:",
           $("description").value.trim() || "Unspecified",
@@ -165,8 +228,19 @@
           files.push({ name: `${prefix}_broken_missing_last_${percent}pct.txt`, text: createBrokenClipboard(full, "end", percent) });
         }
         files.forEach((file) => info.push(`- ${file.name} (${clipboardLineCount(file.text)} lines)`));
+        if (definitions.length) {
+          info.push("", "Material Function definitions:");
+          definitions.forEach((definition) => info.push(`- ${definition.name}: functions/${definition.folder}/`));
+          files.push({ name: "function-definitions.txt", text: definitions.map((definition) => [
+            `Name: ${definition.name}`,
+            `Description: ${definition.description || "Unspecified"}`,
+            `Folder: functions/${definition.folder}/`,
+            `Clipboard: ${definition.files[0].name}`,
+            "",
+          ].join("\n")).join("\n") });
+        }
         files.unshift({ name: "info.txt", text: info.join("\n") + "\n" });
-        return { folder: prefix, files };
+        return { folder: prefix, files, definitions };
       }
 
       async function writeFile(directory, file) {
@@ -174,6 +248,15 @@
         const stream = await handle.createWritable();
         await stream.write(file.text);
         await stream.close();
+      }
+
+      async function writeDefinitions(sampleDirectory, definitions) {
+        if (!definitions.length) return;
+        const definitionsDirectory = await sampleDirectory.getDirectoryHandle("functions", { create: true });
+        for (const definition of definitions) {
+          const definitionDirectory = await definitionsDirectory.getDirectoryHandle(definition.folder, { create: true });
+          for (const file of definition.files) await writeFile(definitionDirectory, file);
+        }
       }
 
       $("chooseFolder").addEventListener("click", async () => {
@@ -191,6 +274,8 @@
         }
       });
 
+      $("addFunction").addEventListener("click", addFunctionDefinition);
+
       saveButton.addEventListener("click", async () => {
         try {
           const sample = collectFiles();
@@ -205,7 +290,8 @@
           saveButton.disabled = true;
           setStatus("Сохранение...");
           for (const file of sample.files) await writeFile(sampleDirectory, file);
-          setStatus(`Готово: ${sample.folder} — ${sample.files.length} файлов.`, "success");
+          await writeDefinitions(sampleDirectory, sample.definitions);
+          setStatus(`Готово: ${sample.folder} — ${sample.files.length} файлов и ${sample.definitions.length} определений функций.`, "success");
         } catch (error) {
           setStatus(`Не удалось сохранить: ${error.message}`, "error");
         } finally {

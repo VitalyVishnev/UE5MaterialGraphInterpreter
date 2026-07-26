@@ -318,3 +318,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Removed order-dependent branch typing that silently selected the first incompatible vector width.
 - Confirmed Epic's scalar-broadcast and unequal-vector incompatibility rules; incomplete runtime branches now remain inferred.
 - Kept compile-time platform/quality permutations honest when their branch widths differ, while selected Static Switches use only the active branch.
+
+## 2026-07-26 - Auxiliary Material Function sample capture
+
+- Extended the local sample-capture helper with an unlimited flat list of auxiliary Material Function clipboard definitions, each with an optional identity and description.
+- Save definitions under `functions/<ordered-name>/` beside the root sample and write `function-definitions.txt` as a readable index; clipboard asset paths retain the actual dependency tree.

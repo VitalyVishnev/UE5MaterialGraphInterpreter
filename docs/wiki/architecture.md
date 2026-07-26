@@ -6,7 +6,7 @@ The application exposes one deep stateful analysis interface, `createAnalysisWor
 
 Current supporting surface:
 
-- `sample-capture.html` - dependency-free local browser helper for writing clipboard samples and their metadata. It uses the browser File System Access API; no clipboard data is sent to a server.
+- `sample-capture.html` - dependency-free local browser helper for writing a root clipboard, partial/broken variants, and a flat library of auxiliary Material Function definitions into one sample folder. Each definition has its own clipboard and `info.txt` under `functions/`; `function-definitions.txt` indexes them for humans. It uses the browser File System Access API; no clipboard data is sent to a server.
 - `src/analyze.ts` - application-facing analysis interface.
 - `src/functions/library.ts` - Function Definition Library: exact signature validation, recursive dependency tree, shared/cyclic dependency handling, definition-derived type facts, call-site Static Bool specialization, inline-size estimation, and Graph IR expansion.
 - `src/functions/signature.ts` - canonical Function Signature Module. It orders call arguments, helper parameters, validation, and inline bindings by stable Unreal input/output IDs rather than editor pin or definition-node order.
