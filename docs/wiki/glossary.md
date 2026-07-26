@@ -7,7 +7,9 @@ This page defines project-specific terms, workflows, and abbreviations. Use prec
 - `Graph IR` - the resolved in-memory model of copied UE nodes, pins, links, roots, outputs, and diagnostics.
 - `Graph Slice` - the cycle-safe connected upstream subset for one or more selected outputs; an all-output slice is the union of their dependencies.
 - `Pseudo-HLSL` - deterministic human-readable code that describes graph semantics without claiming to be Unreal compiler output.
-- `Semantic Anchor` - a stable pseudo-HLSL declaration justified by author naming, graph reuse, opacity, or expression size; it prevents both node-by-node noise and unreadable single-line expansion.
+- `Semantic Anchor` - a stable pseudo-HLSL declaration justified by author naming, graph reuse, opacity, expression size, or optional statement control flow; it prevents both node-by-node noise and unreadable single-line expansion.
+- `Transparent Alias` - an ordinary or Named Reroute that exclusively forwards one value. The generator back-propagates its final authored name and omits the intermediate declaration unless the value branches.
+- `Pure-expression reuse` - conservative reuse of two structurally identical allowlisted Math values in the same innermost Comment Region. It never merges engine reads, texture samples, Material Functions, Custom HLSL, derivatives, authored names, or manually overridden nodes.
 - `Type Fact` - the numeric type and certainty currently established for one Graph IR output pin.
 - `Confirmed Type` - a type proven by explicit graph metadata or deterministic expression semantics; rendered as `float`, `float2`, and so on.
 - `Inferred Type` - a single type derived from surrounding graph constraints rather than declared on the value itself; rendered with a `?` prefix such as `?float2`.

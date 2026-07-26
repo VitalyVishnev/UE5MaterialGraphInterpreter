@@ -89,6 +89,7 @@ export interface PseudoHlslOptions {
   commentSections: boolean;
   expandCustomNodes: boolean;
   multilineCalls: boolean;
+  ifElseStatements: boolean;
   spaceComplexOperations: boolean;
   simplifyAlgebra: boolean;
 }
@@ -98,6 +99,7 @@ export const defaultPseudoHlslOptions: PseudoHlslOptions = {
   commentSections: true,
   expandCustomNodes: false,
   multilineCalls: true,
+  ifElseStatements: false,
   spaceComplexOperations: true,
   simplifyAlgebra: false,
 };
@@ -109,6 +111,10 @@ interface Value {
   opaque?: boolean;
   call?: { name: string; args: string[]; suffix?: string };
   operation?: { operator: string; left: string; right: string };
+  conditional?: {
+    branches: readonly { condition: string; value: string }[];
+    fallback: string;
+  };
 }
 
 interface Declaration {
@@ -125,6 +131,44 @@ const textureEnumNames = new Set(["mipvaluemode", "sampler source", "sampler typ
 const reservedIdentifiers = new Set([
   "bool", "break", "case", "continue", "default", "do", "else", "false", "float",
   "for", "if", "int", "return", "struct", "switch", "true", "uint", "void", "while",
+  "abs", "acos", "all", "any", "asin", "atan", "atan2", "ceil", "clamp", "cos",
+  "cross", "ddx", "ddy", "distance", "dot", "exp", "exp2", "floor", "fmod", "frac",
+  "length", "lerp", "log", "log10", "log2", "max", "min", "normalize", "pow", "round",
+  "rsqrt", "saturate", "sign", "sin", "sqrt", "step", "tan", "trunc",
+]);
+const deduplicableExpressionClasses = new Set([
+  "MaterialExpressionAbs",
+  "MaterialExpressionAdd",
+  "MaterialExpressionArccosine",
+  "MaterialExpressionArcsine",
+  "MaterialExpressionArctangent",
+  "MaterialExpressionArctangent2",
+  "MaterialExpressionCeil",
+  "MaterialExpressionClamp",
+  "MaterialExpressionCrossProduct",
+  "MaterialExpressionDivide",
+  "MaterialExpressionDistance",
+  "MaterialExpressionDotProduct",
+  "MaterialExpressionExponential",
+  "MaterialExpressionExponential2",
+  "MaterialExpressionFloor",
+  "MaterialExpressionFmod",
+  "MaterialExpressionFrac",
+  "MaterialExpressionLength",
+  "MaterialExpressionLinearInterpolate",
+  "MaterialExpressionLogarithm2",
+  "MaterialExpressionLogarithm10",
+  "MaterialExpressionMax",
+  "MaterialExpressionMin",
+  "MaterialExpressionMultiply",
+  "MaterialExpressionNormalize",
+  "MaterialExpressionOneMinus",
+  "MaterialExpressionPower",
+  "MaterialExpressionRound",
+  "MaterialExpressionSaturate",
+  "MaterialExpressionSign",
+  "MaterialExpressionSquareRoot",
+  "MaterialExpressionSubtract",
 ]);
 
 function renderedType(value: Value | undefined): string {
@@ -133,7 +177,7 @@ function renderedType(value: Value | undefined): string {
   return value.confidence === "inferred" ? `?${value.type}` : value.type;
 }
 
-function identifier(value: string): string {
+export function identifier(value: string): string {
   const cleaned = value
     .normalize("NFKD")
     .replace(/[^A-Za-z0-9_]+/g, "_")
@@ -196,6 +240,17 @@ function pinByName(node: GraphNode, ...names: string[]): GraphPin | undefined {
 
 function outputKey(nodeId: string, pinId: string): string {
   return `${nodeId}:${pinId}`;
+}
+
+function pureExpressionKey(node: GraphNode, pin: GraphPin, type: string): string | undefined {
+  if (!deduplicableExpressionClasses.has(node.expressionClass) || node.displayName || node.commentRegions?.length) {
+    return undefined;
+  }
+  const inputs = inputPins(node).map((input) => {
+    const link = input.links[0];
+    return `${input.name}:${link ? outputKey(link.nodeId, link.pinId) : input.defaultValue ?? ""}`;
+  });
+  return `${node.expressionClass}|${pin.name}|${type}|${inputs.join("|")}`;
 }
 
 function editableSymbolId(node: GraphNode, pin: GraphPin, namespace?: string): string {
@@ -323,14 +378,87 @@ function operationValue(
   };
 }
 
+function conditionalValue(
+  greaterCondition: string,
+  lessCondition: string,
+  greater: Value,
+  equal: Value,
+  less: Value,
+  type: string,
+): Value {
+  if (greater.code === equal.code) {
+    const nested = greater.conditional;
+    const conditional = {
+      branches: [
+        { condition: lessCondition, value: less.code },
+        ...(nested?.branches ?? []),
+      ],
+      fallback: nested?.fallback ?? greater.code,
+    };
+    return {
+      code: conditional.branches.reduceRight(
+        (fallback, branch) => `(${branch.condition} ? ${branch.value} : ${fallback})`,
+        conditional.fallback,
+      ),
+      type,
+      conditional,
+    };
+  }
+  const conditional = {
+    branches: [
+      { condition: greaterCondition, value: greater.code },
+      { condition: lessCondition, value: less.code },
+    ],
+    fallback: equal.code,
+  };
+  return {
+    code: conditional.branches.reduceRight(
+      (fallback, branch) => `(${branch.condition} ? ${branch.value} : ${fallback})`,
+      conditional.fallback,
+    ),
+    type,
+    conditional,
+  };
+}
+
 function isComplexValue(value: Value): boolean {
+  if (value.conditional) return true;
   if (value.call && value.call.args.length >= 3) return true;
   if (!value.operation || value.code.length <= 80) return false;
   const calls = `${value.operation.left} ${value.operation.right}`.match(/[A-Za-z_]\w*\(/g);
   return (calls?.length ?? 0) >= 2;
 }
 
-function assignment(type: string, name: string, value: Value, multilineCalls: boolean): string {
+function conditionalStatement(type: string, name: string, value: NonNullable<Value["conditional"]>): string {
+  const lines = [`${type} ${name};`];
+  value.branches.forEach(({ condition, value: branchValue }, index) => {
+    lines.push(`${index ? "else " : ""}if ${condition}`);
+    lines.push("{");
+    lines.push(`    ${name} = ${branchValue};`);
+    lines.push("}");
+  });
+  lines.push("else");
+  lines.push("{");
+  lines.push(`    ${name} = ${value.fallback};`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function assignment(
+  type: string,
+  name: string,
+  value: Value,
+  multilineCalls: boolean,
+  ifElseStatements = false,
+): string {
+  if (ifElseStatements && value.conditional) {
+    return conditionalStatement(type, name, value.conditional);
+  }
+  if (multilineCalls && value.conditional) {
+    const lines = value.conditional.branches.map(({ condition, value }) =>
+      `    ${condition} ? ${value} :`);
+    return `${type} ${name} = (\n${[...lines, `    ${value.conditional.fallback}`].join("\n")}\n);`;
+  }
   if (multilineCalls && isComplexValue(value) && value.operation) {
     return `${type} ${name} = (\n    ${value.operation.left}\n    ${value.operation.operator} ${value.operation.right}\n);`;
   }
@@ -404,8 +532,7 @@ function renderDeclarations(declarations: Declaration[]): string[] {
       && activeLargeRegions[sharedDepth].id === largeRegions[sharedDepth].id) sharedDepth += 1;
     for (const region of largeRegions.slice(sharedDepth)) {
       if (lines.length > 0 && lines.at(-1) !== "") lines.push("");
-      if (seenLargeRegions.has(region.id)) lines.push(`// ${region.text} (continued)`);
-      else {
+      if (!seenLargeRegions.has(region.id)) {
         lines.push(separator, `// ${region.text}`, separator);
         seenLargeRegions.add(region.id);
       }
@@ -502,7 +629,7 @@ function generatePseudoHlslForOutputs(
   const functionInputs: FunctionInputDeclaration[] = [];
 
   const uniqueName = (preferred: string): string => {
-    let candidate = preferred;
+    let candidate = identifier(preferred);
     let index = 2;
     while (usedNames.has(candidate)) candidate = `${preferred}_${index++}`;
     usedNames.add(candidate);
@@ -640,6 +767,24 @@ function generatePseudoHlslForOutputs(
       case "MaterialExpressionOneMinus": {
         const value = input(node, ["Input"]);
         return { code: `(1.0 - ${value.code})`, type: value.type };
+      }
+      case "MaterialExpressionIf": {
+        const a = input(node, ["A"]);
+        const b = input(node, ["B"], "ConstB");
+        const greater = input(node, ["A > B"]);
+        const equalPin = pinByName(node, "A == B");
+        const equal = equalPin?.links.length || equalPin?.defaultValue !== undefined
+          ? linkedValue(node, equalPin)
+          : greater;
+        const less = input(node, ["A < B"]);
+        const threshold = input(node, ["Equals Threshold"], "EqualsThreshold");
+        const type = combinedType(
+          { code: "", type: combinedType(greater, equal) },
+          less,
+        );
+        const greaterCondition = `(${a.code} > (${b.code} + ${threshold.code}))`;
+        const lessCondition = `(${a.code} < (${b.code} - ${threshold.code}))`;
+        return conditionalValue(greaterCondition, lessCondition, greater, equal, less, type);
       }
       case "MaterialExpressionCosine": {
         const value = periodicRadians(node);
@@ -1111,8 +1256,19 @@ function generatePseudoHlslForOutputs(
       }
     }
   }
-  const absorbedReroutes = new Set<string>();
-  const terminalNamedRerouteName = (nodeId: string, pin: GraphPin): string | undefined => {
+  const pureExpressionCounts = new Map<string, number>();
+  for (const node of orderedNodes) {
+    for (const pinId of neededPins.get(node.id) ?? []) {
+      const pin = node.pins.find((candidate) => candidate.id === pinId);
+      if (!pin) continue;
+      const fact = typeInference.facts.get(outputKey(node.id, pin.id));
+      const key = pureExpressionKey(node, pin, fact?.type ?? "unknown");
+      if (key) pureExpressionCounts.set(key, (pureExpressionCounts.get(key) ?? 0) + 1);
+    }
+  }
+  const absorbedAliases = new Set<string>();
+  const pureValues = new Map<string, Value>();
+  const terminalAliasName = (nodeId: string, pin: GraphPin): string | undefined => {
     const path: string[] = [];
     let sourceKey = outputKey(nodeId, pin.id);
     let name: string | undefined;
@@ -1122,17 +1278,14 @@ function generatePseudoHlslForOutputs(
       visited.add(sourceKey);
       const consumers = consumersByOutput.get(sourceKey) ?? [];
       if (consumers.length !== 1) break;
-      const reroute = consumers[0];
-      const rerouteOutput = outputPins(reroute)[0];
-      if (reroute.expressionClass === "MaterialExpressionNamedRerouteUsage" && rerouteOutput) {
-        sourceKey = outputKey(reroute.id, rerouteOutput.id);
-        continue;
+      const alias = consumers[0];
+      const aliasOutput = outputPins(alias)[0];
+      if (!aliasOutput || !/MaterialExpression(?:Named)?Reroute(?:Declaration|Usage)?$/.test(alias.expressionClass)) {
+        break;
       }
-      if (reroute.expressionClass !== "MaterialExpressionNamedRerouteDeclaration" || !reroute.displayName) break;
-      if (!rerouteOutput) break;
-      path.push(reroute.id);
-      name = identifier(reroute.displayName);
-      sourceKey = outputKey(reroute.id, rerouteOutput.id);
+      path.push(alias.id);
+      name = authoredName(alias) ?? name;
+      sourceKey = outputKey(alias.id, aliasOutput.id);
     }
 
     const terminalOutputs = outputsBySource.get(sourceKey) ?? [];
@@ -1140,7 +1293,7 @@ function generatePseudoHlslForOutputs(
       const outputName = terminalOutputs[0].label;
       if (!name || !isGenericResultName(outputName)) name = identifier(outputName);
     }
-    if (name) path.forEach((rerouteId) => absorbedReroutes.add(rerouteId));
+    if (name) path.forEach((aliasId) => absorbedAliases.add(aliasId));
     return name;
   };
 
@@ -1159,7 +1312,7 @@ function generatePseudoHlslForOutputs(
           preferredName(
             node,
             pin,
-            terminalNamedRerouteName(node.id, pin) ?? externalResultBaseName(node, pin),
+            terminalAliasName(node.id, pin) ?? externalResultBaseName(node, pin),
           ),
         );
         const value: Value = {
@@ -1241,10 +1394,16 @@ function generatePseudoHlslForOutputs(
       const nameOverride = nameOverrides.has(
         editableSymbolId(node, pin, functionKnowledge?.symbolNamespace),
       );
+      const pureKey = nameOverride ? undefined : pureExpressionKey(node, pin, value.type);
+      const canonicalPureValue = pureKey ? pureValues.get(pureKey) : undefined;
+      if (canonicalPureValue) {
+        values.set(key, canonicalPureValue);
+        continue;
+      }
       const trivialComponentProjection =
         value.type === "float" && /^[A-Za-z_]\w*\.[rgba]$/.test(value.code);
       const redundantRerouteAlias = /MaterialExpression(?:Named)?Reroute(?:Declaration|Usage)?$/.test(node.expressionClass)
-        && (absorbedReroutes.has(node.id) || !authored || authored === value.code)
+        && (absorbedAliases.has(node.id) || !authored || authored === value.code)
         && /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?$/.test(value.code);
       const keep =
         !redundantRerouteAlias && (
@@ -1254,6 +1413,8 @@ function generatePseudoHlslForOutputs(
           Boolean(commentRegion) ||
           nameOverride ||
           Boolean(value.opaque) ||
+          options.ifElseStatements && Boolean(value.conditional) ||
+          Boolean(pureKey && (pureExpressionCounts.get(pureKey) ?? 0) > 1) ||
           (useCounts.get(key) ?? 0) > 1 && !trivialComponentProjection ||
           value.code.length > maxInlineExpressionLength
         );
@@ -1267,7 +1428,7 @@ function generatePseudoHlslForOutputs(
         ? externalResultBaseName(node, pin)
         : nodeBaseName(node);
       const terminalName = node.kind !== "function-input" && !/Parameter$/.test(node.expressionClass)
-        ? terminalNamedRerouteName(node.id, pin)
+        ? terminalAliasName(node.id, pin)
         : undefined;
       const name = uniqueName(preferredName(
         node,
@@ -1277,9 +1438,16 @@ function generatePseudoHlslForOutputs(
       registerSymbol(node, pin, name, value);
       const preamble = node.kind === "function-input" || functionInputSymbols.has(value.code);
       values.set(key, { code: name, type: value.type, confidence: value.confidence });
+      if (pureKey) pureValues.set(pureKey, values.get(key)!);
       const code = node.kind === "function-input"
         ? `${renderedType(value)} ${name}; // Function input`
-        : assignment(renderedType(value), name, value, options.multilineCalls);
+        : assignment(
+            renderedType(value),
+            name,
+            value,
+            options.multilineCalls,
+            options.ifElseStatements,
+          );
       declarations.push({
         code,
         commentRegions: preamble || !options.commentSections ? undefined : node.commentRegions,

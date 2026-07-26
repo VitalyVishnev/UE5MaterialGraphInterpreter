@@ -370,8 +370,7 @@ describe("Function Definition Library", () => {
       ]),
     ].join("\n");
     const definition = [
-      ...[["B", outputB, "2.0", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC2", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2"],
-        ["A", outputA, "1.0", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC1", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD1"]]
+      ...[["A", outputA, "1.0", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC1", "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD1"]]
         .flatMap(([name, id, value, constantPin, outputPin], index) => [
           `Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="C${index}"`,
           `Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="CE${index}"`,
@@ -391,6 +390,29 @@ describe("Function Definition Library", () => {
           `CustomProperties Pin (PinId=${outputPin},PinName="Input",LinkedTo=(C${index} ${constantPin}))`,
           "End Object",
         ]),
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Lerp"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionLinearInterpolate Name="LerpExpression"',
+      "End Object",
+      'Begin Object Name="LerpExpression"',
+      "ConstA=1.0",
+      "ConstB=2.0",
+      "ConstAlpha=0.5",
+      'Description="B"',
+      "End Object",
+      'CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC2,PinName="A",DefaultValue="1.0")',
+      'CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC3,PinName="B",DefaultValue="2.0")',
+      'CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC4,PinName="Alpha",DefaultValue="0.5")',
+      'CustomProperties Pin (PinId=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC5,PinName="Output",Direction="EGPD_Output",LinkedTo=(FOB DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2))',
+      "End Object",
+      'Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="FOB"',
+      'Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="FOBE"',
+      "End Object",
+      'Begin Object Name="FOBE"',
+      'OutputName="B"',
+      `Id=${outputB}`,
+      "End Object",
+      'CustomProperties Pin (PinId=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2,PinName="Input",LinkedTo=(Lerp CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC5))',
+      "End Object",
     ].join("\n");
     const workspace = createAnalysisWorkspace(root, new Map([[target, definition]]));
 
@@ -398,12 +420,15 @@ describe("Function Definition Library", () => {
     expect(workspace.analyze().code).toContain("A = 1.0;");
     expect(workspace.analyze().code).not.toContain("float A = 1.0;");
     expect(workspace.analyze().code).not.toContain("A = A;");
+    expect(workspace.analyze().code).toContain("B = lerp(\n");
+    expect(workspace.analyze().code).not.toContain("float B = lerp(");
     const strict = workspace.analyze({
       formatting: {
         bundleFormat: "strict",
         commentSections: true,
         expandCustomNodes: false,
         multilineCalls: true,
+        ifElseStatements: false,
         spaceComplexOperations: true,
         simplifyAlgebra: false,
       },

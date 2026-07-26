@@ -1,5 +1,13 @@
 # Documentation Log
 
+## 2026-07-26 - Readable If statements and conservative expression compaction
+
+Added an optional conventional `if / else if / else` rendering mode for Material `If`, improved exclusive ordinary/Named Reroute name back-propagation, stopped repeated Comment Region labels on dependency-forced re-entry, and reused only strictly matching pure Math expressions inside the same section.
+
+## 2026-07-26 - Explicit Material If and safe helper output rendering
+
+Replaced opaque six-argument Material `If` calls with a documented three-way conditional that preserves `Equals Threshold`; collapse repeated equal branches into range chains; protected generated identifiers from HLSL intrinsic collisions; and made readable multi-output helpers assign to existing `out` parameters even when the source expression spans multiple lines.
+
 ## 2026-07-19 - Product README drafted
 
 Added the English V1 landing README with a live demo, problem statement, workflow, real pseudo-HLSL example, supported feature families, type-certainty notation, variable-naming hierarchy, privacy contract, limitations, and reserved paired-screenshot placement.

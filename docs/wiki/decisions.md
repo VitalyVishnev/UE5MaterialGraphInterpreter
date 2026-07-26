@@ -124,7 +124,9 @@ Inline one-use expressions. Retain function inputs, parameters, shared values, o
 
 For a single-output external Material Function call, prefer a meaningful serialized output pin name such as `Selected Vector -> selectedVector`. Keep the asset-derived name only for generic pins such as `Result`, `Output`, or `Return Value`, where the pin contributes no semantic information.
 
-If an expression result flows exclusively through one or more Named Reroute renames or directly into a graph output, name the computation with the final authored name and remove the alias chain. Function Outputs return or bundle the existing value instead of declaring `output = value`. Preserve intermediate declarations when the value branches before a rename. Never rename Function Inputs or Parameters because those names are external contracts.
+If an expression result flows exclusively through one or more ordinary or Named Reroute aliases or directly into a graph output, name the computation with the final authored name and remove the alias chain. Function Outputs return or bundle the existing value instead of declaring `output = value`. Preserve intermediate declarations when the value branches before a rename. Never rename Function Inputs or Parameters because those names are external contracts.
+
+Reuse an identical pure math expression only when the expression class, selected output, direct input sources/defaults, inferred type, and innermost Comment Region all match; retain the first declaration as the canonical value. Never merge nodes with authored names, Comment Regions, manual overrides, Custom HLSL, texture reads, Material Function calls, derivatives, or unlisted expression classes.
 
 Reasoning:
 Graph connectivity, reuse, pin metadata, and author comments are deterministic evidence. They improve readability without pretending to infer domain meaning from mathematics.
@@ -638,6 +640,32 @@ Related files:
 - `src/pseudo-hlsl/generate.ts`
 - `src/analyze.ts`
 - `src/main.ts`
+- `tests/pseudo-hlsl.test.ts`
+
+## Decision: Render Material `If` as an explicit three-way selection
+
+Status: Active
+
+Context:
+
+The previous opaque `If(A, B, Greater, Equal, Less, Threshold)` call hid the actual role of the three result pins and was especially hard to read inside nested switch helpers.
+
+Decision:
+
+Render `MaterialExpressionIf` as `(A > B + Threshold) ? Greater : (A < B - Threshold) ? Less : Equal` by default. The optional `Render Material If as if / else` formatting control instead emits a typed result declaration followed by conventional `if / else if / else` assignments. `A` and `B` remain scalar comparison values; the final three values are the selected result branches. An unconnected `A == B` reuses `A > B`, matching Unreal's documented input default. When rendered `Greater` and `Equal` values are identical, collapse the redundant comparison to `(A < B - Threshold) ? Less : Equal`; preserve and append any already-inlined range chain.
+
+Reasoning:
+
+The expression is nestable like an HLSL value expression, but no longer hides branch meaning behind a pseudo-call. The equality threshold stays explicit rather than being discarded as an unexplained sixth argument.
+
+Consequences:
+
+Nested UE `If` chains no longer duplicate default equal branches and read as ascending range selections where graph structure permits. This is semantic output, not a claim that the generated expression is Unreal's exact compiler text.
+
+Related files:
+
+- `src/pseudo-hlsl/generate.ts`
+- `src/graph/expression-semantics.ts`
 - `tests/pseudo-hlsl.test.ts`
 
 Use this form for durable choices:

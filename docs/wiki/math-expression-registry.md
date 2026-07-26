@@ -33,7 +33,7 @@ This registry covers all 51 unique `MaterialExpression` classes in the supplied 
 | `Fmod` | `fmod(A, B)` | `promote(A, B)` in float domain |
 | `Frac` | `frac(Input)` | `T(Input)` |
 | `HsvToRgb` | `HsvToRgb(Input)` | `float3` |
-| `If` | `If(A, B, Greater, Equal, Less, Threshold)` | common branch type; A and B are float; an unconnected `A == B` inherits `A > B` |
+| `If` | default `(A > B + Threshold) ? Greater : (A < B - Threshold) ? Less : Equal`; optional conventional `if / else if / else`; equal rendered branches collapse into a two-way range test | common branch type; A and B are float; an unconnected `A == B` inherits `A > B` |
 | `InverseLinearInterpolate` | `inverseLerp(A, B, Value)` | `T(Value)` |
 | `LinearInterpolate` | `lerp(A, B, Alpha)` | `promote(A, B)` |
 | `Logarithm` | `log(Input)` | `T(Input)` |

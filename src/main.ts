@@ -29,6 +29,7 @@ const functionModeSelect = element<HTMLSelectElement>("function-mode");
 const showSections = element<HTMLInputElement>("show-sections");
 const expandCustomNodes = element<HTMLInputElement>("expand-custom-nodes");
 const wrapCalls = element<HTMLInputElement>("wrap-calls");
+const renderIfStatements = element<HTMLInputElement>("render-if-statements");
 const spaceOperations = element<HTMLInputElement>("space-operations");
 const simplifyAlgebra = element<HTMLInputElement>("simplify-algebra");
 const syntaxHighlighting = element<HTMLInputElement>("syntax-highlighting");
@@ -880,6 +881,11 @@ expandCustomNodes.addEventListener("change", () => {
 
 wrapCalls.addEventListener("change", () => {
   formatting.multilineCalls = wrapCalls.checked;
+  reanalyzeAccepted();
+});
+
+renderIfStatements.addEventListener("change", () => {
+  formatting.ifElseStatements = renderIfStatements.checked;
   reanalyzeAccepted();
 });
 

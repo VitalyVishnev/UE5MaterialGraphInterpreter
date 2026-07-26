@@ -128,18 +128,18 @@ Related files:
 - `src/pseudo-hlsl/generate.ts`
 - `src/main.ts`
 
-## Limitation: Equivalent pure nodes are not globally deduplicated
+## Limitation: Pure-expression reuse is deliberately narrow
 
 Status: Open
 
 Symptoms:
-Pseudo-HLSL may contain repeated calls such as two identical `LocalPosition()` expressions or separately serialized parameters with `_2` suffixes.
+Pseudo-HLSL can retain repeated engine reads, Material Function calls, named/commented nodes, or mathematically equivalent expressions that differ structurally.
 
 Likely cause:
-The generator compacts aliases and one-use expressions but intentionally preserves distinct Unreal nodes. A global common-subexpression pass would require a proven purity and property-equivalence contract for each expression class.
+The generator reuses only a fixed allowlist of pure Math expressions with the same direct sources/defaults, result type, and innermost Comment Region. A global common-subexpression pass would require a stronger purity and property-equivalence contract.
 
 Current workaround:
-Read the repeated expressions as equivalent when their complete serialized settings match. Named aliases and final-output copies are already collapsed safely.
+Use the generated code as a readable graph model. Transparent exclusive aliases and the proven allowlisted Math expressions are already collapsed safely.
 
 Do not repeat:
 Do not deduplicate arbitrary engine expressions or Custom/Material Function calls solely because their rendered strings match.

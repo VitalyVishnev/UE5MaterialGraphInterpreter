@@ -160,6 +160,186 @@ describe("generatePseudoHlsl", () => {
     expect(result.code).toContain("// Unreal periodic trig nodes use cycle-domain inputs; converted to HLSL radians (2 * PI * Input / Period).");
   });
 
+  it("renders Unreal If as explicit greater, equal, and less branches", () => {
+    const constant = (id: string, value: string, targetPin: string): GraphNode => ({
+      id,
+      expressionClass: "MaterialExpressionConstant",
+      kind: "expression",
+      properties: new Map([["R", value]]),
+      pins: [{ id: `${id}Out`, name: "Output", direction: "output", links: [{ nodeId: "If", pinId: targetPin }] }],
+      startLine: 1,
+    });
+    const ifNode: GraphNode = {
+      id: "If",
+      expressionClass: "MaterialExpressionIf",
+      kind: "expression",
+      properties: new Map([["EqualsThreshold", "0.00001"]]),
+      pins: [
+        { id: "A", name: "A", direction: "input", links: [{ nodeId: "A", pinId: "AOut" }] },
+        { id: "B", name: "B", direction: "input", links: [{ nodeId: "B", pinId: "BOut" }] },
+        { id: "Greater", name: "A > B", direction: "input", links: [{ nodeId: "Greater", pinId: "GreaterOut" }] },
+        { id: "Equal", name: "A == B", direction: "input", links: [] },
+        { id: "Less", name: "A < B", direction: "input", links: [{ nodeId: "Less", pinId: "LessOut" }] },
+        { id: "Threshold", name: "Equals Threshold", direction: "input", defaultValue: "0.00001", links: [] },
+        { id: "IfOut", name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    };
+    const output: GraphNode = {
+      id: "Output",
+      expressionClass: "MaterialExpressionFunctionOutput",
+      kind: "function-output",
+      properties: new Map([["OutputName", "Result"]]),
+      pins: [],
+      startLine: 1,
+    };
+    const graph: MaterialGraph = {
+      nodes: new Map([
+        constant("A", "2.0", "A"),
+        constant("B", "1.0", "B"),
+        constant("Greater", "10.0", "Greater"),
+        constant("Less", "30.0", "Less"),
+        ifNode,
+        output,
+      ].map((node) => [node.id, node])),
+      outputs: [{
+        id: "Output:Input",
+        label: "Result",
+        ownerNodeId: "Output",
+        ownerPinId: "OutputIn",
+        sourceNodeId: "If",
+        sourcePinId: "IfOut",
+      }],
+      diagnostics: [],
+    };
+
+    const result = generatePseudoHlsl(graph, graph.outputs[0].id);
+    const statements = generatePseudoHlsl(
+      graph,
+      graph.outputs[0].id,
+      new Map(),
+      { ...defaultAnalysisFormatting, ifElseStatements: true },
+    );
+
+    expect(result.code).toContain("(2.0 < (1.0 - 0.00001)) ? 30.0 : 10.0");
+    expect(result.code).not.toContain("2.0 >");
+    expect(result.code).not.toContain("If(");
+    expect(statements.code).toContain("float Result;");
+    expect(statements.code).toContain("if (2.0 < (1.0 - 0.00001))");
+    expect(statements.code).toContain("Result = 30.0;");
+    expect(statements.code).toContain("else\n{");
+    expect(statements.code).not.toContain("?");
+  });
+
+  it("avoids generated identifiers that shadow HLSL intrinsics", () => {
+    const input: GraphNode = {
+      id: "Input",
+      expressionClass: "MaterialExpressionFunctionInput",
+      kind: "function-input",
+      properties: new Map([["InputType", "FunctionInput_Vector3"]]),
+      pins: [{ id: "InputOut", name: "Output", direction: "output", links: [] }],
+      startLine: 1,
+      displayName: "normalize",
+    };
+    const normalize: GraphNode = {
+      id: "Normalize",
+      expressionClass: "MaterialExpressionNormalize",
+      kind: "expression",
+      properties: new Map(),
+      pins: [
+        { id: "NormalizeIn", name: "Input", direction: "input", links: [{ nodeId: "Input", pinId: "InputOut" }] },
+        { id: "NormalizeOut", name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    };
+    const output: GraphNode = {
+      id: "Output",
+      expressionClass: "MaterialExpressionFunctionOutput",
+      kind: "function-output",
+      properties: new Map([["OutputName", "Result"]]),
+      pins: [],
+      startLine: 1,
+    };
+    const graph: MaterialGraph = {
+      nodes: new Map([input, normalize, output].map((node) => [node.id, node])),
+      outputs: [{
+        id: "Output:Input",
+        label: "Result",
+        ownerNodeId: "Output",
+        ownerPinId: "OutputIn",
+        sourceNodeId: "Normalize",
+        sourcePinId: "NormalizeOut",
+      }],
+      diagnostics: [],
+    };
+
+    const result = generatePseudoHlsl(graph, graph.outputs[0].id);
+
+    expect(result.code).toContain("float3 normalizeValue; // Function input");
+    expect(result.code).toContain("normalize(normalizeValue)");
+    expect(result.code).not.toContain("float3 normalize;");
+  });
+
+  it("deduplicates identical pure math nodes within one graph section", () => {
+    const color: GraphNode = {
+      id: "Color",
+      expressionClass: "MaterialExpressionFunctionInput",
+      kind: "function-input",
+      properties: new Map([["InputType", "FunctionInput_Vector3"]]),
+      pins: [{ id: "ColorOut", name: "Output", direction: "output", links: [] }],
+      startLine: 1,
+      displayName: "Color",
+    };
+    const abs = (id: string): GraphNode => ({
+      id,
+      expressionClass: "MaterialExpressionAbs",
+      kind: "expression",
+      properties: new Map(),
+      pins: [
+        { id: `${id}In`, name: "Input", direction: "input", links: [{ nodeId: "Color", pinId: "ColorOut" }] },
+        { id: `${id}Out`, name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    });
+    const add: GraphNode = {
+      id: "Add",
+      expressionClass: "MaterialExpressionAdd",
+      kind: "expression",
+      properties: new Map(),
+      pins: [
+        { id: "A", name: "A", direction: "input", links: [{ nodeId: "AbsA", pinId: "AbsAOut" }] },
+        { id: "B", name: "B", direction: "input", links: [{ nodeId: "AbsB", pinId: "AbsBOut" }] },
+        { id: "AddOut", name: "Output", direction: "output", links: [] },
+      ],
+      startLine: 1,
+    };
+    const output: GraphNode = {
+      id: "Output",
+      expressionClass: "MaterialExpressionFunctionOutput",
+      kind: "function-output",
+      properties: new Map([["OutputName", "Result"]]),
+      pins: [],
+      startLine: 1,
+    };
+    const graph: MaterialGraph = {
+      nodes: new Map([color, abs("AbsA"), abs("AbsB"), add, output].map((node) => [node.id, node])),
+      outputs: [{
+        id: "Output:Input",
+        label: "Result",
+        ownerNodeId: "Output",
+        ownerPinId: "OutputIn",
+        sourceNodeId: "Add",
+        sourcePinId: "AddOut",
+      }],
+      diagnostics: [],
+    };
+
+    const result = generatePseudoHlsl(graph, graph.outputs[0].id);
+
+    expect(result.code.match(/abs\(Color\)/g)).toHaveLength(1);
+    expect(result.code).toMatch(/\(absValue \+ absValue\)/);
+  });
+
   it("inlines a repeated single-component Convert projection", () => {
     const source: GraphNode = {
       id: "Source",
@@ -1160,6 +1340,7 @@ End Object`;
         commentSections: false,
         expandCustomNodes: false,
         multilineCalls: false,
+        ifElseStatements: false,
         spaceComplexOperations: false,
         simplifyAlgebra: false,
       },

@@ -20,6 +20,7 @@ import {
   functionOutputId,
   generateAllPseudoHlsl,
   generatePseudoHlsl,
+  identifier,
   materialFunctionName,
   type PseudoHlslOptions,
   type EditableSymbol,
@@ -248,10 +249,12 @@ function renderHelper(
       }
       const outputNames = new Set(graph.outputs.map((output) => safeName(output.label)));
       const body = lines.slice(0, start).map((line) => {
-        const declaration = line.match(/^(\s*)(?:\?[A-Za-z_]\w*\+?|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*=\s*(.+);$/);
-        return declaration && outputNames.has(declaration[2])
-          ? `${declaration[1]}${declaration[2]} = ${declaration[3]};`
-          : line;
+        const declaration = line.match(/^(\s*)(?:\?[A-Za-z_]\w*\+?|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*=/);
+        if (declaration && outputNames.has(declaration[2])) {
+          return line.replace(/^(\s*)(?:\?[A-Za-z_]\w*\+?|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*=/, "$1$2 =");
+        }
+        const bareDeclaration = line.match(/^(\s*)(?:\?[A-Za-z_]\w*\+?|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*;$/);
+        return bareDeclaration && outputNames.has(bareDeclaration[2]) ? "" : line;
       });
       lines = [...body, ...assignments];
     }
@@ -302,8 +305,7 @@ function renderHelper(
 }
 
 function safeName(value: string): string {
-  const cleaned = value.replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "value";
-  return /^\d/.test(cleaned) ? `_${cleaned}` : cleaned;
+  return identifier(value);
 }
 
 function functionCycleDiagnostics(nodes: readonly FunctionDependencyNode[]): Diagnostic[] {
