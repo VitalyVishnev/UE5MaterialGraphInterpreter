@@ -183,6 +183,82 @@ describe("type inference", () => {
     expect(result.diagnostics.some((item) => item.code === "type-conflict")).toBe(false);
   });
 
+  it("does not let an inferred consumer constraint erase a confirmed source type", () => {
+    const vector = node("Vector", "MaterialExpressionConstant3Vector", [{
+      id: "vector-out", name: "Output", direction: "output",
+      links: [{ nodeId: "Call", pinId: "value" }],
+    }]);
+    const call = node("Call", "MaterialExpressionMaterialFunctionCall", [{
+      id: "value", name: "Value (V2)", direction: "input",
+      links: [{ nodeId: "Vector", pinId: "vector-out" }],
+    }, {
+      id: "call-out", name: "Output", direction: "output", links: [],
+    }]);
+    const graph: MaterialGraph = {
+      nodes: new Map([vector, call].map((item) => [item.id, item])),
+      outputs: [],
+      diagnostics: [],
+    };
+    const slice: GraphSlice = {
+      outputId: "test",
+      outputIds: ["test"],
+      nodeIds: new Set(["Vector", "Call"]),
+      orderedNodeIds: ["Vector", "Call"],
+      externalInputs: [],
+      staticSwitches: [],
+      staticSwitchSelections: new Map(),
+      diagnostics: [],
+    };
+
+    const result = inferTypes(graph, slice);
+    expect(result.facts.get("Vector:vector-out")).toEqual({
+      type: "float3",
+      confidence: "confirmed",
+    });
+    expect(result.diagnostics.some((item) => item.code === "type-conflict")).toBe(false);
+  });
+
+  it("uses the Registry for SceneTexture and same-as-input expressions", () => {
+    const color = node("Color", "MaterialExpressionConstant3Vector", [{
+      id: "color-out", name: "Output", direction: "output",
+      links: [{ nodeId: "Desaturate", pinId: "input" }],
+    }]);
+    const desaturate = node("Desaturate", "MaterialExpressionDesaturation", [{
+      id: "input", name: "Input", direction: "input",
+      links: [{ nodeId: "Color", pinId: "color-out" }],
+    }, {
+      id: "fraction", name: "Fraction", direction: "input", defaultValue: "0.5", links: [],
+    }, {
+      id: "desaturate-out", name: "Output", direction: "output", links: [],
+    }]);
+    const sceneTexture = node("SceneTexture", "MaterialExpressionSceneTexture", [{
+      id: "color", name: "Color", direction: "output", links: [],
+    }, {
+      id: "size", name: "Size", direction: "output", links: [],
+    }]);
+    const nodes = [color, desaturate, sceneTexture];
+    const graph: MaterialGraph = {
+      nodes: new Map(nodes.map((item) => [item.id, item])),
+      outputs: [],
+      diagnostics: [],
+    };
+    const slice: GraphSlice = {
+      outputId: "test",
+      outputIds: ["test"],
+      nodeIds: new Set(nodes.map(({ id }) => id)),
+      orderedNodeIds: nodes.map(({ id }) => id),
+      externalInputs: [],
+      staticSwitches: [],
+      staticSwitchSelections: new Map(),
+      diagnostics: [],
+    };
+
+    const result = inferTypes(graph, slice);
+    expect(result.facts.get("Desaturate:desaturate-out")?.type).toBe("float3");
+    expect(result.facts.get("SceneTexture:color")?.type).toBe("float4");
+    expect(result.facts.get("SceneTexture:size")?.type).toBe("float2");
+  });
+
   it("allows a scalar operand to broadcast in a vector dot product", () => {
     const vector = node("Vector", "MaterialExpressionConstant2Vector", [{
       id: "vector-out", name: "Output", direction: "output",

@@ -567,6 +567,7 @@ const fixedAdvancedInputTypes: Readonly<Record<string, Readonly<Record<string, M
 
 const equivalentInputs: Readonly<Record<string, readonly string[]>> = {
   MaterialExpressionConstantBiasScale: ["Input"],
+  MaterialExpressionDesaturation: ["Input"],
   MaterialExpressionDDX: ["Value"],
   MaterialExpressionDDY: ["Value"],
   MaterialExpressionShaderStageSwitch: ["PixelShader", "VertexShader"],
@@ -706,6 +707,9 @@ export function fixedExpressionOutputType(
     return ({ XYZ: "float3", XY: "float2", Z: "float" } as const)[
       pin.name as "XYZ" | "XY" | "Z"
     ];
+  }
+  if (node.expressionClass === "MaterialExpressionSceneTexture") {
+    return pin.name === "Size" || pin.name === "InvSize" ? "float2" : "float4";
   }
   const builtIn = inputDataExpression(node.expressionClass);
   if (builtIn) {

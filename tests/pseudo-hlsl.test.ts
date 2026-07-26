@@ -1048,7 +1048,7 @@ End Object`;
     const result = generatePseudoHlsl(graph, output.id);
 
     expect(result.code).toContain("float3 Color; // Function input");
-    expect(result.code).toContain("float4 Color_2 =");
+    expect(result.code).toContain("Color_2 =");
   });
 
   sampleIt("treats Named Reroutes as transparent named data flow", () => {

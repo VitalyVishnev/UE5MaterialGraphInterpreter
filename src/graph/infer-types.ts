@@ -35,6 +35,8 @@ export interface TypeInferenceResult {
 }
 
 const key = (nodeId: string, pinId: string): string => `${nodeId}:${pinId}`;
+const confidenceRank = (confidence: InferredType["confidence"]): number =>
+  confidence === "confirmed" ? 2 : confidence === "inferred" ? 1 : 0;
 
 const channelTypes: Readonly<Record<string, NumericType>> = {
   red: "float",
@@ -119,14 +121,8 @@ export function inferTypes(
       return true;
     }
     if (current.type !== type) {
-      const scalarBroadcast =
-        isNumericType(current.type)
-        && isNumericType(type)
-        && numericDimensions(current.type) !== numericDimensions(type);
-      if (scalarBroadcast && current.type === "float" && current.confidence === "confirmed"
-        && confidence === "inferred") return false;
-      if (scalarBroadcast && type === "float" && confidence === "confirmed"
-        && current.confidence === "inferred") {
+      if (confidenceRank(current.confidence) > confidenceRank(confidence)) return false;
+      if (confidenceRank(confidence) > confidenceRank(current.confidence)) {
         facts.set(valueKey, { type, confidence });
         return true;
       }
@@ -225,15 +221,6 @@ export function inferTypes(
         break;
       case "MaterialExpressionFunctionInput":
         set(first, declaredFunctionInputType(node.properties.get("InputType")), "confirmed");
-        break;
-      case "MaterialExpressionSceneTexture":
-        for (const pin of outputPins(node)) {
-          set(
-            key(node.id, pin.id),
-            pin.name === "Size" || pin.name === "InvSize" ? "float2" : pinType(pin) ?? "float4",
-            "confirmed",
-          );
-        }
         break;
       case "MaterialExpressionComponentMask": {
         const count = ["R", "G", "B", "A"].filter(

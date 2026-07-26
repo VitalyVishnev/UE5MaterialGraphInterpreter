@@ -361,3 +361,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 - Replaced positional Material Function output identities with stable Unreal `FunctionOutput.Id` keys throughout inference, helper rendering, and manual Type Overrides.
 - Derived output facts independently for every resolved Static Bool Function Input configuration; the inspector now groups equal configurations and exposes scoped overrides.
 - Helper mode emits one uniquely named specialized helper per configuration and removes fixed Static Bool inputs from its runtime signature and calls.
+
+## 2026-07-26 - Type Fact precedence and Registry consolidation
+
+- Confirmed Type Facts now outrank incompatible inferred constraints; equal-strength contradictions remain explicit type conflicts.
+- Moved SceneTexture output dimensions and Desaturation's same-as-input rule into the Expression Semantics Registry so Function Definition Library inference shares the same contracts as pseudo-HLSL generation.
