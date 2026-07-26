@@ -4,6 +4,7 @@ This page defines project-specific terms, workflows, and abbreviations. Use prec
 
 - `Sample-capture visual language` - the approved initial UI baseline: restrained utility-first layout, system theme support, compact readable controls, clear sections, responsive behavior, and no decorative noise.
 - `Resizable Workspace` - the three-column desktop arrangement of Clipboard/Graph Inspector, pseudo-HLSL, and Code Settings. Its two column separators and one left-row separator redistribute the fixed workspace area, snap near their defaults, and retain custom dimensions for the current browser tab.
+- `Code Search` - local, case-insensitive literal search in the rendered pseudo-HLSL. It highlights matches and navigates them without altering analysis, generated text, or copied code.
 - `Graph IR` - the resolved in-memory model of copied UE nodes, pins, links, roots, outputs, and diagnostics.
 - `Graph Slice` - the cycle-safe connected upstream subset for one or more selected outputs; an all-output slice is the union of their dependencies.
 - `Pseudo-HLSL` - deterministic human-readable code that describes graph semantics without claiming to be Unreal compiler output.

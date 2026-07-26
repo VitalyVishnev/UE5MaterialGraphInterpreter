@@ -1,9 +1,10 @@
 const storageKey = "ue5-material-graph-interpreter:layout";
 const handleSize = 7;
 const snapDistance = 14;
-const mobileLayout = window.matchMedia("(max-width: 900px)");
+const minimumLeftPane = 180;
+const minimumRightPane = 170;
 
-type LayoutState = {
+export type LayoutState = {
   left: number;
   right: number;
   input: number;
@@ -22,11 +23,14 @@ function defaults(width: number, height: number): LayoutState {
   };
 }
 
-function limits(workspace: HTMLElement, state: LayoutState): LayoutState {
-  const { width, height } = workspace.getBoundingClientRect();
+export function constrainLayout(width: number, height: number, state: LayoutState): LayoutState {
   const centerMinimum = Math.min(360, width * 0.38);
-  const left = clamp(state.left, 180, width - state.right - centerMinimum - handleSize * 2);
-  const right = clamp(state.right, 170, width - left - centerMinimum - handleSize * 2);
+  const sidePaneBudget = Math.max(
+    minimumLeftPane + minimumRightPane,
+    width - centerMinimum - handleSize * 2,
+  );
+  const left = clamp(state.left, minimumLeftPane, sidePaneBudget - minimumRightPane);
+  const right = clamp(state.right, minimumRightPane, sidePaneBudget - left);
   return {
     left,
     right,
@@ -49,12 +53,14 @@ function readStoredState(): LayoutState | undefined {
 }
 
 export function mountResizableWorkspace(workspace: HTMLElement): void {
+  const mobileLayout = window.matchMedia("(max-width: 900px)");
   const handles = [...workspace.querySelectorAll<HTMLElement>("[data-resize]")];
   let state = readStoredState() ?? defaults(workspace.clientWidth, workspace.clientHeight);
 
   const apply = (): void => {
     if (mobileLayout.matches) return;
-    state = limits(workspace, state);
+    const { width, height } = workspace.getBoundingClientRect();
+    state = constrainLayout(width, height, state);
     workspace.style.setProperty("--left-pane", `${state.left}px`);
     workspace.style.setProperty("--right-pane", `${state.right}px`);
     workspace.style.setProperty("--input-pane", `${state.input}px`);

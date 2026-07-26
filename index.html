@@ -61,11 +61,20 @@
         <div class="workspace-resizer row-resizer" data-resize="input" role="separator" aria-label="Resize Clipboard and Graph Inspector" aria-orientation="horizontal" tabindex="0" title="Drag to resize. Double-click to restore the default."></div>
 
         <div class="panel code-panel">
-          <div class="type-legend" aria-label="Type confidence legend">
-            <span title="Type is declared or proven by the graph"><code class="token-type">float</code> confirmed</span>
-            <span title="Type is inferred from surrounding graph constraints"><code class="token-inferred">?float</code> inferred</span>
-            <span title="The value has at least this many numeric channels"><code class="token-inferred">?float2+</code> at least float2</span>
-            <span title="The graph does not provide enough evidence"><code class="token-unresolved">?type</code> unresolved</span>
+          <div class="code-toolbar">
+            <div class="type-legend" aria-label="Type confidence legend">
+              <span title="Type is declared or proven by the graph"><code class="token-type">float</code> confirmed</span>
+              <span title="Type is inferred from surrounding graph constraints"><code class="token-inferred">?float</code> inferred</span>
+              <span title="The value has at least this many numeric channels"><code class="token-inferred">?float2+</code> at least float2</span>
+              <span title="The graph does not provide enough evidence"><code class="token-unresolved">?type</code> unresolved</span>
+            </div>
+            <div id="code-search" class="code-search">
+              <label class="sr-only" for="code-search-input">Search generated pseudo-HLSL</label>
+              <input id="code-search-input" type="search" placeholder="Find in code" autocomplete="off" spellcheck="false">
+              <span id="code-search-count" aria-live="polite"></span>
+              <button id="code-search-previous" type="button" aria-label="Previous match" title="Previous match" disabled>↑</button>
+              <button id="code-search-next" type="button" aria-label="Next match" title="Next match" disabled>↓</button>
+            </div>
           </div>
           <pre id="code" aria-label="Generated pseudo-HLSL"><code>// Generated pseudo-HLSL will appear here.</code></pre>
         </div>
@@ -173,6 +182,10 @@
                 <label class="check-setting" title="Color types, keywords, function calls, and identifiers by their pseudo-HLSL role; turn off for neutral white text">
                   <input id="syntax-highlighting" type="checkbox" checked>
                   <span>Syntax highlighting</span>
+                </label>
+                <label class="check-setting" title="Show logical generated-code line numbers; wrapped visual lines retain one source line number">
+                  <input id="show-line-numbers" type="checkbox">
+                  <span>Show line numbers</span>
                 </label>
               </div>
             </details>

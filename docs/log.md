@@ -371,3 +371,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 
 - Added tracked, hand-authored clipboard fixtures for parser errors, Material Root outputs, Function Library validation, Static Switches, Named Reroutes, Convert, and Custom type propagation.
 - Kept the ignored real-graph samples as a broader local integration suite; public CI now has representative fixture coverage without publishing private graph content.
+
+## 2026-07-26 - Code-panel navigation and symmetric resizing
+
+- Constrained both workspace side panes from one width budget so dragging Code Settings wide cannot collapse Clipboard/Graph Inspector or distort resize handles.
+- Added optional logical line numbers and an always-visible compact pseudo-HLSL search field with `Ctrl+F`, match count, highlights, and previous/next navigation.

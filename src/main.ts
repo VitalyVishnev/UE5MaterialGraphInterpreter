@@ -33,6 +33,12 @@ const renderIfStatements = element<HTMLInputElement>("render-if-statements");
 const spaceOperations = element<HTMLInputElement>("space-operations");
 const simplifyAlgebra = element<HTMLInputElement>("simplify-algebra");
 const syntaxHighlighting = element<HTMLInputElement>("syntax-highlighting");
+const showLineNumbers = element<HTMLInputElement>("show-line-numbers");
+const codeSearch = element<HTMLDivElement>("code-search");
+const codeSearchInput = element<HTMLInputElement>("code-search-input");
+const codeSearchCount = element<HTMLSpanElement>("code-search-count");
+const codeSearchPrevious = element<HTMLButtonElement>("code-search-previous");
+const codeSearchNext = element<HTMLButtonElement>("code-search-next");
 const code = element<HTMLElement>("code").querySelector("code")!;
 const diagnostics = element<HTMLOListElement>("diagnostics");
 const staticSwitches = element<HTMLDivElement>("static-switches");
@@ -86,6 +92,8 @@ let functionMode: FunctionExpansionMode = "helpers";
 let allowLargeInline = false;
 let volatileFunctionLibrary = false;
 let codePopoverState: CodePopoverState | undefined;
+let codeSearchMatches: HTMLElement[] = [];
+let activeCodeSearchMatch = -1;
 
 mountResizableWorkspace(workspaceElement);
 
@@ -224,11 +232,14 @@ function renderCode(result: AnalysisResult): void {
   ));
   const lines = result.code.split("\n");
   for (const [lineIndex, line] of lines.entries()) {
+    const lineElement = document.createElement("span");
+    lineElement.className = "code-line";
+    lineElement.dataset.line = String(lineIndex + 1);
     let cursor = 0;
     for (const match of line.matchAll(codeTokenPattern)) {
       const token = match[0];
       const index = match.index ?? 0;
-      fragment.append(document.createTextNode(line.slice(cursor, index)));
+      lineElement.append(document.createTextNode(line.slice(cursor, index)));
       const span = document.createElement("span");
       span.textContent = token;
       const remainingLine = line.slice(index + token.length);
@@ -265,14 +276,71 @@ function renderCode(result: AnalysisResult): void {
         const open = () => openRenamePopover(symbol, span);
         makeInteractiveCodeToken(span, "code-symbol", `Rename ${symbol.name}`, open);
       }
-      fragment.append(span);
+      lineElement.append(span);
       cursor = index + token.length;
       if (token.startsWith("//")) break;
     }
-    fragment.append(document.createTextNode(line.slice(cursor)));
+    lineElement.append(document.createTextNode(line.slice(cursor)));
+    fragment.append(lineElement);
     if (lineIndex < lines.length - 1) fragment.append(document.createTextNode("\n"));
   }
   code.replaceChildren(fragment);
+  updateCodeSearch();
+}
+
+function focusCodeSearchMatch(index: number): void {
+  if (!codeSearchMatches.length) return;
+  activeCodeSearchMatch = (index + codeSearchMatches.length) % codeSearchMatches.length;
+  for (const [matchIndex, match] of codeSearchMatches.entries()) {
+    match.classList.toggle("active", matchIndex === activeCodeSearchMatch);
+  }
+  const matchBounds = codeSearchMatches[activeCodeSearchMatch].getBoundingClientRect();
+  const codeBounds = code.getBoundingClientRect();
+  code.scrollTop += matchBounds.top - codeBounds.top - codeBounds.height / 2 + matchBounds.height / 2;
+  codeSearchCount.textContent = `${activeCodeSearchMatch + 1}/${codeSearchMatches.length}`;
+}
+
+function updateCodeSearch(): void {
+  for (const match of codeSearchMatches) {
+    match.replaceWith(document.createTextNode(match.textContent ?? ""));
+  }
+  code.normalize();
+  codeSearchMatches = [];
+  activeCodeSearchMatch = -1;
+  const query = codeSearchInput.value.trim().toLocaleLowerCase();
+  codeSearch.classList.toggle("has-query", Boolean(query));
+  if (query) {
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) textNodes.push(node as Text);
+    for (const textNode of textNodes) {
+      const text = textNode.textContent ?? "";
+      const lower = text.toLocaleLowerCase();
+      if (!lower.includes(query)) continue;
+      const replacement = document.createDocumentFragment();
+      let cursor = 0;
+      for (let index = lower.indexOf(query, cursor); index >= 0; index = lower.indexOf(query, cursor)) {
+        replacement.append(document.createTextNode(text.slice(cursor, index)));
+        const match = document.createElement("mark");
+        match.className = "code-search-match";
+        match.textContent = text.slice(index, index + query.length);
+        replacement.append(match);
+        codeSearchMatches.push(match);
+        cursor = index + query.length;
+      }
+      replacement.append(document.createTextNode(text.slice(cursor)));
+      textNode.replaceWith(replacement);
+    }
+  }
+  codeSearchPrevious.disabled = codeSearchMatches.length === 0;
+  codeSearchNext.disabled = codeSearchMatches.length === 0;
+  if (codeSearchMatches.length) focusCodeSearchMatch(0);
+  else codeSearchCount.textContent = query ? "0/0" : "";
+}
+
+function focusCodeSearch(): void {
+  codeSearchInput.focus();
+  codeSearchInput.select();
 }
 
 function renderDiagnostics(result: AnalysisResult): number {
@@ -909,6 +977,32 @@ simplifyAlgebra.addEventListener("change", () => {
 
 syntaxHighlighting.addEventListener("change", () => {
   code.classList.toggle("syntax-disabled", !syntaxHighlighting.checked);
+});
+
+showLineNumbers.addEventListener("change", () => {
+  code.classList.toggle("line-numbers", showLineNumbers.checked);
+});
+
+codeSearchInput.addEventListener("input", updateCodeSearch);
+codeSearchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    focusCodeSearchMatch(activeCodeSearchMatch + (event.shiftKey ? -1 : 1));
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    codeSearchInput.value = "";
+    updateCodeSearch();
+    codeSearchInput.blur();
+  }
+});
+codeSearchPrevious.addEventListener("click", () => focusCodeSearchMatch(activeCodeSearchMatch - 1));
+codeSearchNext.addEventListener("click", () => focusCodeSearchMatch(activeCodeSearchMatch + 1));
+document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+    event.preventDefault();
+    focusCodeSearch();
+  }
 });
 
 clearFunctionLibrary.addEventListener("click", () => {

@@ -22,8 +22,8 @@ Current supporting surface:
 - `src/graph/material-types.ts` - numeric and material-domain type Module. It owns internal float/uint construction, family, width, promotion, family casts, Function Input declarations, and the narrower user-selectable override list.
 - `src/pseudo-hlsl/generate.ts` - supported-node translation, opaque fallback, diagnostics, stable text rendering, declaration/alias planning, conservative pure-expression reuse, and the stable editable-symbol/type-override map behind one interface.
 - `src/session-storage.ts` - defensive session-map serialization; malformed payloads become empty maps and quota failures are reported without mutating active in-memory state.
-- `src/main.ts` and `src/styles.css` - dependency-free DOM Adapter in the approved visual language. `main.ts` depends only on the application analysis Seam and has one reanalysis path for every output, override, formatting change, and inline presentation edit.
-- `src/resizable-layout.ts` - deep browser-layout Module behind one `mountResizableWorkspace(...)` Interface. It owns column/row dragging, constraints, default snapping, keyboard resizing, and tab-local size persistence without leaking layout state into analysis.
+- `src/main.ts` and `src/styles.css` - dependency-free DOM Adapter in the approved visual language. `main.ts` depends only on the application analysis Seam and has one reanalysis path for every output, override, formatting change, and inline presentation edit; code search and line numbers are local presentation state and do not trigger analysis.
+- `src/resizable-layout.ts` - deep browser-layout Module behind one `mountResizableWorkspace(...)` Interface. It owns column/row dragging, symmetric side-pane constraints, default snapping, keyboard resizing, and tab-local size persistence without leaking layout state into analysis.
 - `tests/` - public-interface, invariant, stable-output, public synthetic clipboard-corpus, and private local-fixture tests.
 
 Parser-relevant evidence from the current fixtures:
