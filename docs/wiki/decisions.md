@@ -610,7 +610,7 @@ Reasoning:
 MIT is a short permissive license suitable for a freely shared personal tool. Excluding samples avoids publishing third-party graphs without established redistribution rights.
 
 Consequences:
-The repository can publish the application and maintained technical documentation, but fixture-dependent tests need a separate redistributable test corpus before clean-clone CI can run the complete suite.
+The repository publishes the application and maintained technical documentation with a compact redistributable synthetic clipboard corpus under `tests/public-fixtures/`. It covers the parser, Material Root outputs, Function Library signatures, Static Switches, Named Reroutes, Convert, Custom type propagation, and truncated text without including private graph content. The ignored `samples/` directory remains a broader local integration suite; public CI must not claim it executed those private scenarios.
 
 Related files:
 

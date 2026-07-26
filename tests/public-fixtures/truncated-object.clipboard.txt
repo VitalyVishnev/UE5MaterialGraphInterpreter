@@ -1,0 +1,5 @@
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="Incomplete"
+Begin Object Class=/Script/Engine.MaterialExpressionAdd Name="IncompleteExpression"
+End Object
+Begin Object Name="IncompleteExpression"
+ConstA=1.0

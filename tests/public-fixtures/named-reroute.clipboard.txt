@@ -1,0 +1,37 @@
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicInput"
+Begin Object Class=/Script/Engine.MaterialExpressionFunctionInput Name="PublicInputExpression"
+End Object
+Begin Object Name="PublicInputExpression"
+InputName="Position"
+Id=50000000000000000000000000000001
+End Object
+CustomProperties Pin (PinId=50000000000000000000000000000002,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicDeclaration 50000000000000000000000000000003))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicDeclaration"
+Begin Object Class=/Script/Engine.MaterialExpressionNamedRerouteDeclaration Name="PublicDeclarationExpression"
+End Object
+Begin Object Name="PublicDeclarationExpression"
+Name="SharedPosition"
+VariableGuid=50000000000000000000000000000004
+End Object
+CustomProperties Pin (PinId=50000000000000000000000000000003,PinName="Input",LinkedTo=(PublicInput 50000000000000000000000000000002))
+CustomProperties Pin (PinId=50000000000000000000000000000005,PinName="Output",Direction="EGPD_Output")
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicUsage"
+Begin Object Class=/Script/Engine.MaterialExpressionNamedRerouteUsage Name="PublicUsageExpression"
+End Object
+Begin Object Name="PublicUsageExpression"
+Declaration="/Script/Engine.MaterialExpressionNamedRerouteDeclaration'PublicDeclaration.PublicDeclarationExpression'"
+DeclarationGuid=50000000000000000000000000000004
+End Object
+CustomProperties Pin (PinId=50000000000000000000000000000006,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicOutput 50000000000000000000000000000007))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicOutput"
+Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="PublicOutputExpression"
+End Object
+Begin Object Name="PublicOutputExpression"
+OutputName="Result"
+Id=50000000000000000000000000000008
+End Object
+CustomProperties Pin (PinId=50000000000000000000000000000007,PinName="Input",LinkedTo=(PublicUsage 50000000000000000000000000000006))
+End Object

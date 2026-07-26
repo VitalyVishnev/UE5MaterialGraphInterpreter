@@ -366,3 +366,8 @@ Removed phantom Custom arguments, filtered unused secondary outputs from partial
 
 - Confirmed Type Facts now outrank incompatible inferred constraints; equal-strength contradictions remain explicit type conflicts.
 - Moved SceneTexture output dimensions and Desaturation's same-as-input rule into the Expression Semantics Registry so Function Definition Library inference shares the same contracts as pseudo-HLSL generation.
+
+## 2026-07-26 - Public synthetic clipboard corpus
+
+- Added tracked, hand-authored clipboard fixtures for parser errors, Material Root outputs, Function Library validation, Static Switches, Named Reroutes, Convert, and Custom type propagation.
+- Kept the ignored real-graph samples as a broader local integration suite; public CI now has representative fixture coverage without publishing private graph content.

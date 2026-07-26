@@ -1,0 +1,31 @@
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicInput"
+Begin Object Class=/Script/Engine.MaterialExpressionFunctionInput Name="PublicInputExpression"
+End Object
+Begin Object Name="PublicInputExpression"
+InputName="InputUV"
+Id=60000000000000000000000000000001
+InputType=FunctionInput_Vector2
+End Object
+CustomProperties Pin (PinId=60000000000000000000000000000002,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicConvert 60000000000000000000000000000003))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicConvert"
+Begin Object Class=/Script/Engine.MaterialExpressionConvert Name="PublicConvertExpression"
+End Object
+Begin Object Name="PublicConvertExpression"
+ConvertInputs(0)=(Type=Vector2)
+ConvertOutputs(0)=(Type=Vector2)
+ConvertMappings(0)=(OutputComponentIndex=1)
+ConvertMappings(1)=(InputComponentIndex=1)
+End Object
+CustomProperties Pin (PinId=60000000000000000000000000000003,PinName="Input",LinkedTo=(PublicInput 60000000000000000000000000000002))
+CustomProperties Pin (PinId=60000000000000000000000000000004,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicOutput 60000000000000000000000000000005))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicOutput"
+Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="PublicOutputExpression"
+End Object
+Begin Object Name="PublicOutputExpression"
+OutputName="Swapped"
+Id=60000000000000000000000000000006
+End Object
+CustomProperties Pin (PinId=60000000000000000000000000000005,PinName="Input",LinkedTo=(PublicConvert 60000000000000000000000000000004))
+End Object

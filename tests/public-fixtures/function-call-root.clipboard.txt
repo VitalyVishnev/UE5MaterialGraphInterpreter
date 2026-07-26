@@ -1,0 +1,18 @@
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicCall"
+Begin Object Class=/Script/Engine.MaterialExpressionMaterialFunctionCall Name="PublicCallExpression"
+End Object
+Begin Object Name="PublicCallExpression"
+MaterialFunction=MaterialFunction'"/Public/MF_PublicValue.MF_PublicValue"'
+FunctionOutputs(0)=(ExpressionOutputId=30000000000000000000000000000001,Output=(OutputName="Value"))
+End Object
+CustomProperties Pin (PinId=30000000000000000000000000000002,PinName="Value",Direction="EGPD_Output",LinkedTo=(PublicResult 30000000000000000000000000000003))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicResult"
+Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="PublicResultExpression"
+End Object
+Begin Object Name="PublicResultExpression"
+OutputName="Result"
+Id=30000000000000000000000000000004
+End Object
+CustomProperties Pin (PinId=30000000000000000000000000000003,PinName="Input",LinkedTo=(PublicCall 30000000000000000000000000000002))
+End Object

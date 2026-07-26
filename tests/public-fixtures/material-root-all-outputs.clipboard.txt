@@ -1,0 +1,20 @@
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode_Root Name="PublicRoot"
+CustomProperties Pin (PinId=10000000000000000000000000000001,PinName="Base Color",LinkedTo=(PublicColor 20000000000000000000000000000001))
+CustomProperties Pin (PinId=10000000000000000000000000000002,PinName="Roughness",LinkedTo=(PublicRoughness 20000000000000000000000000000002))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicColor"
+Begin Object Class=/Script/Engine.MaterialExpressionConstant3Vector Name="PublicColorExpression"
+End Object
+Begin Object Name="PublicColorExpression"
+Constant=(R=0.1,G=0.2,B=0.3)
+End Object
+CustomProperties Pin (PinId=20000000000000000000000000000001,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicRoot 10000000000000000000000000000001))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicRoughness"
+Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="PublicRoughnessExpression"
+End Object
+Begin Object Name="PublicRoughnessExpression"
+R=0.5
+End Object
+CustomProperties Pin (PinId=20000000000000000000000000000002,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicRoot 10000000000000000000000000000002))
+End Object

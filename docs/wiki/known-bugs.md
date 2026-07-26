@@ -212,18 +212,18 @@ Related files:
 - `src/graph/slice.ts`
 - `src/main.ts`
 
-## Limitation: Complete regression coverage requires the private sample corpus
+## Limitation: The broadest regression coverage remains private
 
 Status: Workaround
 
 Symptoms:
-A clean Git checkout without `samples/` runs the self-contained suite and explicitly skips fixture-dependent scenarios. A local checkout with `samples/` runs the complete regression corpus.
+A clean Git checkout runs the public synthetic clipboard corpus but explicitly skips scenarios that require the broader ignored `samples/` corpus. A local checkout with `samples/` additionally runs those integration scenarios.
 
 Likely cause:
 The original regression suite intentionally grew around real project graphs, while those graphs are now excluded from public distribution due to unverified provenance.
 
 Current workaround:
-Each fixture-dependent test uses `sampleIt`, which becomes `it.skip` only when `samples/` is absent. Public CI remains green without claiming that skipped private-fixture scenarios ran; local development retains the full suite. A future redistributable synthetic corpus can replace the skipped coverage.
+`tests/public-fixtures/` supplies tracked synthetic clipboard inputs for core parser and semantic contracts. Each private-fixture-dependent test still uses `sampleIt`, which becomes `it.skip` only when `samples/` is absent. Public CI remains green without claiming that skipped private-fixture scenarios ran; local development retains the broader suite.
 
 Do not repeat:
 Do not delete the local regression scenarios or silently report the public subset as complete fixture coverage.

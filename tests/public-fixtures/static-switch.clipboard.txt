@@ -1,0 +1,43 @@
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicBool"
+Begin Object Class=/Script/Engine.MaterialExpressionStaticBool Name="PublicBoolExpression"
+End Object
+Begin Object Name="PublicBoolExpression"
+End Object
+CustomProperties Pin (PinId=40000000000000000000000000000001,PinName="Value",DefaultValue=True)
+CustomProperties Pin (PinId=40000000000000000000000000000002,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicSwitch 40000000000000000000000000000003))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicTrue"
+Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="PublicTrueExpression"
+End Object
+Begin Object Name="PublicTrueExpression"
+R=1.0
+End Object
+CustomProperties Pin (PinId=40000000000000000000000000000004,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicSwitch 40000000000000000000000000000005))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicFalse"
+Begin Object Class=/Script/Engine.MaterialExpressionConstant Name="PublicFalseExpression"
+End Object
+Begin Object Name="PublicFalseExpression"
+R=2.0
+End Object
+CustomProperties Pin (PinId=40000000000000000000000000000006,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicSwitch 40000000000000000000000000000007))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicSwitch"
+Begin Object Class=/Script/Engine.MaterialExpressionStaticSwitch Name="PublicSwitchExpression"
+End Object
+Begin Object Name="PublicSwitchExpression"
+End Object
+CustomProperties Pin (PinId=40000000000000000000000000000003,PinName="Value",LinkedTo=(PublicBool 40000000000000000000000000000002))
+CustomProperties Pin (PinId=40000000000000000000000000000005,PinName="True",LinkedTo=(PublicTrue 40000000000000000000000000000004))
+CustomProperties Pin (PinId=40000000000000000000000000000007,PinName="False",LinkedTo=(PublicFalse 40000000000000000000000000000006))
+CustomProperties Pin (PinId=40000000000000000000000000000008,PinName="Output",Direction="EGPD_Output",LinkedTo=(PublicOutput 40000000000000000000000000000009))
+End Object
+Begin Object Class=/Script/UnrealEd.MaterialGraphNode Name="PublicOutput"
+Begin Object Class=/Script/Engine.MaterialExpressionFunctionOutput Name="PublicOutputExpression"
+End Object
+Begin Object Name="PublicOutputExpression"
+OutputName="Selected"
+Id=40000000000000000000000000000010
+End Object
+CustomProperties Pin (PinId=40000000000000000000000000000009,PinName="Input",LinkedTo=(PublicSwitch 40000000000000000000000000000008))
+End Object

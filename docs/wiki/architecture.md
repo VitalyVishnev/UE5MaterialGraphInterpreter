@@ -24,7 +24,7 @@ Current supporting surface:
 - `src/session-storage.ts` - defensive session-map serialization; malformed payloads become empty maps and quota failures are reported without mutating active in-memory state.
 - `src/main.ts` and `src/styles.css` - dependency-free DOM Adapter in the approved visual language. `main.ts` depends only on the application analysis Seam and has one reanalysis path for every output, override, formatting change, and inline presentation edit.
 - `src/resizable-layout.ts` - deep browser-layout Module behind one `mountResizableWorkspace(...)` Interface. It owns column/row dragging, constraints, default snapping, keyboard resizing, and tab-local size persistence without leaking layout state into analysis.
-- `tests/` - public-interface, fixture-corpus, invariant, and stable-output tests.
+- `tests/` - public-interface, invariant, stable-output, public synthetic clipboard-corpus, and private local-fixture tests.
 
 Parser-relevant evidence from the current fixtures:
 
